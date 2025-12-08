@@ -1,0 +1,51 @@
+[
+    {
+      "id": 1,
+      "type": "summary",
+      "question": "Give me a brief overview of the claim, including the main events and dates.",
+      "ground_truth": "Motor vehicle accident on 2024-01-03 in Jerusalem; FNOL on 2024-01-05; ER visit on 2024-01-04 with soft-tissue injuries; physiotherapy Feb–April 2024 with return to part-time work on 2024-03-10; settlement on 2024-05-20 with NIS 45,000 bodily injury payment."
+    },
+    {
+      "id": 2,
+      "type": "needle",
+      "question": "On what date did the accident occur?",
+      "ground_truth": "2024-01-03."
+    },
+    {
+      "id": 3,
+      "type": "needle",
+      "question": "Which hospital treated the insured after the accident?",
+      "ground_truth": "Shaare Zedek Medical Center."
+    },
+    {
+      "id": 4,
+      "type": "needle",
+      "question": "Did the insured refuse ambulance transport at the scene?",
+      "ground_truth": "Yes. She refused ambulance transport at the scene and chose to go home with a friend."
+    },
+    {
+      "id": 5,
+      "type": "needle",
+      "question": "On what date was the bodily injury claim settled?",
+      "ground_truth": "2024-05-20."
+    },
+    {
+      "id": 6,
+      "type": "needle",
+      "question": "What amount was agreed as the bodily injury settlement?",
+      "ground_truth": "NIS 45,000."
+    },
+    {
+      "id": 7,
+      "type": "needle+tool",
+      "question": "How many days passed between the accident and the final settlement date?",
+      "ground_truth": "138 days between 2024-01-03 and 2024-05-20."
+    },
+    {
+      "id": 8,
+      "type": "needle",
+      "question": "On what date did the insured return to part-time work?",
+      "ground_truth": "2024-03-10."
+    }
+  ]
+  
