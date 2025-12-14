@@ -5,7 +5,7 @@ motor insurance claim. It demonstrates:
 
 - Multi-granularity indexing (hierarchical + summary)
 - Agent-based routing between different retrievers
-- A simple external tool for deterministic date arithmetic (MCP-style)
+- A real MCP (Model Context Protocol) server + client for date arithmetic, with legacy fallback
 - LLM-as-a-judge evaluation for correctness, relevance, and recall
 
 The code is organized so it can be run from the command line and inspected as a
@@ -29,7 +29,9 @@ midterm_insurance_agents/
       needle_agent.py      # Fine-grained factual agent (+ date tool integration)
     mcp/
       __init__.py
-      client.py            # Date-difference tool (MCP-style external function)
+      client.py            # Date-difference tool (routes to MCP or legacy)
+      date_server.py        # Real MCP server (FastMCP over STDIO)
+      date_client.py        # MCP client wrapper
     eval/
       test_cases.json      # Evaluation questions + ground-truth answers
       judge.py             # LLM-as-a-judge evaluation script
@@ -267,17 +269,54 @@ It makes the separation between “summary” and “needle” behaviour explici
 
 It avoids the complexity and extra latency of LLM-based routing.
 
-5. External tool (MCP-style date-difference)
-Tool implementation: src/mcp/client.py
+5. External tool (MCP date-difference)
 
-python
-Copy code
-def compute_days_between_dates(start: str, end: str) -> int:
-    """
-    Compute the number of days between two ISO dates (YYYY-MM-DD).
-    """
-    ...
-Integration point: NeedleAgent._maybe_answer_with_date_tool().
+The system includes a date-difference tool that can operate in two modes:
+
+**Legacy mode (default):** Direct Python function call for simplicity and reliability.
+
+**Real MCP mode (optional):** Full Model Context Protocol server + client implementation.
+
+5.1 MCP Integration
+
+The project implements a **real MCP (Model Context Protocol) server and client** to demonstrate LLM extension beyond prompting:
+
+**MCP Server:** `src/mcp/date_server.py`
+
+- Implements a FastMCP server over STDIO transport
+- Exposes `days_between_dates` as an MCP tool
+- Handles ISO date/datetime parsing (e.g., '2024-01-03' or '2024-01-03T19:40:00')
+- Uses logging (stderr) instead of stdout prints (required for STDIO servers)
+
+**MCP Client:** `src/mcp/date_client.py`
+
+- Wraps the MCP client session using `StdioServerParameters` and `stdio_client`
+- Manages async context and session lifecycle
+- Calls the MCP tool via `session.call_tool()` with JSON-RPC protocol
+- Provides a synchronous wrapper for use in the agent layer
+
+**Integration:** `src/mcp/client.py`
+
+- `compute_days_between_dates()` is the public API used by agents
+- When `USE_REAL_MCP=1` environment variable is set, routes through real MCP
+- Falls back to `compute_days_between_dates_legacy()` if MCP fails or is disabled
+- This ensures the system works reliably even if MCP dependencies are unavailable
+
+**Usage:**
+
+```powershell
+# Use real MCP
+$env:USE_REAL_MCP="1"
+python .\src\main.py
+
+# Use legacy (default)
+$env:USE_REAL_MCP="0"
+python .\src\main.py
+```
+
+5.2 Integration point
+
+Integration point: `NeedleAgent._maybe_answer_with_date_tool()`.
 
 When a question clearly asks:
 
@@ -285,31 +324,17 @@ When a question clearly asks:
 
 the NeedleAgent:
 
-Recognizes the pattern via a simple string check.
+1. Recognizes the pattern via a simple string check.
+2. Provides canonical accident and settlement dates from the synthetic claim.
+3. Calls `compute_days_between_dates(start_date, end_date)` (which routes to MCP or legacy).
+4. Returns a deterministic textual answer including the day count.
 
-Provides canonical accident and settlement dates from the synthetic claim.
+**Design rationale:**
 
-Calls compute_days_between_dates(start_date, end_date).
-
-Returns a deterministic textual answer including the day count.
-
-Design rationale:
-
-The tool demonstrates the MCP pattern (LLM + structured tool call) in a
-minimal way:
-
-The computation is delegated to a deterministic function, separate from
-the LLM.
-
-The answer is constructed by the agent, using the tool result.
-
-For the midterm, the tool is implemented as a direct Python function rather
-than a full MCP server:
-
-Keeps the infrastructure simple and focused on the core concepts.
-
-Still allows a clear explanation of how it would be exposed as an MCP tool
-in a larger system.
+- **Real MCP mode** demonstrates the full MCP pattern: LLM → agent → MCP client → JSON-RPC → MCP server → deterministic computation
+- **Legacy mode** provides a reliable fallback that works without MCP dependencies
+- The agent layer is unchanged; only the tool implementation switches between modes
+- This satisfies the requirement to "Show that the Large Language Model (LLM) uses MCP to extend capabilities beyond prompting" in a concrete, auditable way
 
 6. LLM-as-a-judge evaluation
 Evaluation code lives in src/eval/.

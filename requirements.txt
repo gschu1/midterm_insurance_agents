@@ -3,4 +3,5 @@ llama-index-llms-openai
 llama-index-embeddings-openai
 python-dotenv
 openai
+mcp>=1.2.0
 
