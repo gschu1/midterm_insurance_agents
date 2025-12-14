@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from llama_index.core.query_engine import BaseQueryEngine
+from llama_index.core.query_engine import BaseQueryEngine  # pyright: ignore[reportMissingImports]
 from mcp.client import compute_days_between_dates
 
 
