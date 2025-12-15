@@ -4,4 +4,6 @@ llama-index-embeddings-openai
 python-dotenv
 openai
 mcp>=1.2.0
+fpdf2
+pypdf
 

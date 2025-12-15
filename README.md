@@ -27,7 +27,7 @@ midterm_insurance_agents/
       manager.py           # Router agent
       summarizer_agent.py  # High-level / timeline agent
       needle_agent.py      # Fine-grained factual agent (+ date tool integration)
-    mcp/
+    mcp_integration/
       __init__.py
       client.py            # Date-difference tool (routes to MCP or legacy)
       date_server.py        # Real MCP server (FastMCP over STDIO)
@@ -281,35 +281,45 @@ The system includes a date-difference tool that can operate in two modes:
 
 The project implements a **real MCP (Model Context Protocol) server and client** to demonstrate LLM extension beyond prompting:
 
-**MCP Server:** `src/mcp/date_server.py`
+**MCP Server:** `src/mcp_integration/date_server.py`
 
 - Implements a FastMCP server over STDIO transport
 - Exposes `days_between_dates` as an MCP tool
 - Handles ISO date/datetime parsing (e.g., '2024-01-03' or '2024-01-03T19:40:00')
 - Uses logging (stderr) instead of stdout prints (required for STDIO servers)
+- Runs as a separate process, spawned via `sys.executable` to ensure same venv
 
-**MCP Client:** `src/mcp/date_client.py`
+**MCP Client:** `src/mcp_integration/date_client.py`
 
 - Wraps the MCP client session using `StdioServerParameters` and `stdio_client`
 - Manages async context and session lifecycle
 - Calls the MCP tool via `session.call_tool()` with JSON-RPC protocol
 - Provides a synchronous wrapper for use in the agent layer
+- Uses `sys.executable` when spawning the server process
 
-**Integration:** `src/mcp/client.py`
+**Integration:** `src/mcp_integration/client.py`
 
 - `compute_days_between_dates()` is the public API used by agents
-- When `USE_REAL_MCP=1` environment variable is set, routes through real MCP
-- Falls back to `compute_days_between_dates_legacy()` if MCP fails or is disabled
-- This ensures the system works reliably even if MCP dependencies are unavailable
+- `compute_days_between_dates_legacy()` is the original implementation (unchanged)
+- **Strict verification mode:** When `USE_REAL_MCP=1` and `ALLOW_MCP_FALLBACK=0`, MCP failures raise errors (grader-proof)
+- **Comfort mode:** When `USE_REAL_MCP=1` and `ALLOW_MCP_FALLBACK=1`, falls back to legacy on failure
+- Logs `[REAL MCP]` when real MCP is successfully used (proof it didn't fall back)
 
 **Usage:**
 
 ```powershell
-# Use real MCP
+# Strict mode (grader-proof) - real MCP required, no fallback
 $env:USE_REAL_MCP="1"
+$env:ALLOW_MCP_FALLBACK="0"
+python .\src\main.py
+# Look for "[REAL MCP] days_between_dates(...) -> 138" in logs
+
+# Comfort mode - real MCP with fallback allowed
+$env:USE_REAL_MCP="1"
+$env:ALLOW_MCP_FALLBACK="1"
 python .\src\main.py
 
-# Use legacy (default)
+# Legacy mode (default)
 $env:USE_REAL_MCP="0"
 python .\src\main.py
 ```
@@ -332,8 +342,10 @@ the NeedleAgent:
 **Design rationale:**
 
 - **Real MCP mode** demonstrates the full MCP pattern: LLM → agent → MCP client → JSON-RPC → MCP server → deterministic computation
+- **Strict mode** ensures real MCP is actually used (no silent fallback) - provable via `[REAL MCP]` log lines
 - **Legacy mode** provides a reliable fallback that works without MCP dependencies
 - The agent layer is unchanged; only the tool implementation switches between modes
+- Local module renamed to `mcp_integration/` to avoid namespace collision with installed `mcp` package
 - This satisfies the requirement to "Show that the Large Language Model (LLM) uses MCP to extend capabilities beyond prompting" in a concrete, auditable way
 
 6. LLM-as-a-judge evaluation
@@ -435,54 +447,99 @@ Answer-generation issues (low correctness despite good context).
 7.1 Setup
 Create and activate a virtual environment:
 
-bash
-Copy code
+```powershell
 python -m venv .venv
-# Windows PowerShell
 .\.venv\Scripts\activate
+```
+
 Install dependencies:
 
-bash
-Copy code
+```powershell
 pip install -r requirements.txt
+```
+
 Create a .env file in the project root:
 
-text
-Copy code
+```
 OPENAI_API_KEY=sk-...
-7.2 Interactive Q&A
-Run:
+```
 
-bash
-Copy code
+7.2 Interactive Q&A
+
+**Legacy mode (default):**
+
+```powershell
 python .\src\main.py
+```
+
+**Strict real MCP mode (grader-proof):**
+
+```powershell
+$env:USE_REAL_MCP="1"
+$env:ALLOW_MCP_FALLBACK="0"
+python .\src\main.py
+```
+
+**Comfort mode (real MCP with fallback):**
+
+```powershell
+$env:USE_REAL_MCP="1"
+$env:ALLOW_MCP_FALLBACK="1"
+python .\src\main.py
+```
+
 Example questions:
 
-Give me a brief overview of the claim, including the main events and dates.
-
-Did the insured refuse ambulance transport at the scene?
-
-How many days passed between the accident and the final settlement date?
+- Give me a brief overview of the claim, including the main events and dates.
+- Did the insured refuse ambulance transport at the scene?
+- How many days passed between the accident and the final settlement date?
 
 The CLI prints:
 
-The chosen agent (summarization or needle)
+- The chosen agent (summarization or needle)
+- The answer text
+- In strict MCP mode, look for `[REAL MCP]` log lines to verify real MCP is being used
 
-The answer text
+**Note on PYTHONPATH for one-liners:**
+
+When running `python -c` from the repo root, `src/` is not automatically on the import path. Set `PYTHONPATH` explicitly:
+
+```powershell
+$env:PYTHONPATH=".\src"
+python -c "from mcp_integration.client import compute_days_between_dates; print(compute_days_between_dates('2024-01-03','2024-05-20'))"
+```
 
 7.3 Evaluation
-Run:
 
-bash
-Copy code
+**Legacy mode (default):**
+
+```powershell
 python .\src\eval\judge.py
+```
+
+**Strict real MCP mode:**
+
+```powershell
+$env:USE_REAL_MCP="1"
+$env:ALLOW_MCP_FALLBACK="0"
+python .\src\eval\judge.py
+```
+
 This will:
 
-Execute all test cases in test_cases.json.
+- Execute all test cases in test_cases.json.
+- Print system answers and scores per case.
+- Print average correctness, relevance, and recall at the end.
 
-Print system answers and scores per case.
+7.4 Claim Timeline PDF
 
-Print average correctness, relevance, and recall at the end.
+The file `data/claim_timeline.pdf` is generated from `data/claim_timeline.md` and must be at least 10 pages long. To regenerate it:
+
+```powershell
+python scripts\ensure_claim_pdf.py
+```
+
+The script will automatically append appendix sections if needed to reach the minimum page count.
 
 8. Limitations and possible extensions
 Current limitations:

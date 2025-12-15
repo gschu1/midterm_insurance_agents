@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from __future__ import annotations
+
 import asyncio
-import importlib.util
 import json
 import logging
 import sys
@@ -9,50 +10,9 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Optional
 
-# Import from installed MCP package, not local src/mcp directory
-# Find and load directly from site-packages to avoid conflicts
-try:
-    import site
-    _site_packages = site.getsitepackages()
-    _mcp_installed_path = None
-    for sp in _site_packages:
-        mcp_init = Path(sp) / 'mcp' / '__init__.py'
-        if mcp_init.exists():
-            _mcp_installed_path = sp
-            break
-    
-    if _mcp_installed_path:
-        # Import from installed package by temporarily prioritizing site-packages
-        # Don't delete modules - just ensure we import from the right place
-        _original_path = sys.path[:]
-        
-        # Temporarily move site-packages to front, move conflicting paths to back
-        _conflicting_paths = [p for p in _original_path if any(x in str(p).lower() for x in ['src', 'midterm_insurance_agents']) and 'site-packages' not in str(p) and 'dist-packages' not in str(p)]
-        _other_paths = [p for p in _original_path if p not in _conflicting_paths]
-        sys.path = [_mcp_installed_path] + _other_paths + _conflicting_paths
-        
-        try:
-            # Use importlib to force import from current sys.path (which prioritizes site-packages)
-            # ClientSession is in mcp.client.session, StdioServerParameters is in mcp.client.stdio
-            _mcp_client_session = importlib.import_module('mcp.client.session')
-            ClientSession = _mcp_client_session.ClientSession
-            
-            _mcp_client_stdio = importlib.import_module('mcp.client.stdio')
-            StdioServerParameters = _mcp_client_stdio.StdioServerParameters
-            stdio_client = _mcp_client_stdio.stdio_client
-        finally:
-            # Restore original path
-            sys.path[:] = _original_path
-    else:
-        raise ImportError("Could not find installed mcp package")
-except Exception as e:
-    # If import fails due to namespace conflict, that's OK - legacy mode will be used
-    # The MCP SDK import is optional; if it fails, real MCP won't be available
-    # but the system will fall back to legacy mode automatically
-    ClientSession = None
-    StdioServerParameters = None  
-    stdio_client = None
-    _mcp_import_error = e
+# Import from installed MCP package - no namespace conflict since we renamed our local module
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +25,7 @@ class MCPDateMathClient:
 
     async def __aenter__(self) -> "MCPDateMathClient":
         server_params = StdioServerParameters(
-            command="python",
+            command=sys.executable,  # Use same Python interpreter (ensures same venv)
             args=[str(self.server_script_path)],
             env=None,
         )
@@ -113,9 +73,6 @@ class MCPDateMathClient:
 
 
 async def _call_days_between_dates(date1: str, date2: str, absolute: bool = True) -> int:
-    if ClientSession is None or stdio_client is None:
-        raise ImportError("MCP SDK not available. This usually means there's a namespace conflict "
-                         "between src/mcp and the installed mcp package. Use legacy mode instead.")
     server_path = Path(__file__).resolve().parent / "date_server.py"
     async with MCPDateMathClient(server_path) as client:
         return await client.days_between_dates(date1, date2, absolute=absolute)

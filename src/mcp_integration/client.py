@@ -27,13 +27,23 @@ def compute_days_between_dates(start: str, end: str) -> int:
     Tool used by the agent.
     If USE_REAL_MCP=1, compute via a real MCP server call.
     Otherwise, use legacy local implementation.
+    
+    Strict mode: If USE_REAL_MCP=1 and MCP fails, raise an error unless
+    ALLOW_MCP_FALLBACK=1 is set.
     """
     use_real = os.getenv("USE_REAL_MCP", "0") == "1"
+    allow_fallback = os.getenv("ALLOW_MCP_FALLBACK", "0") == "1"
+    
     if use_real:
         try:
-            return call_days_between_dates(start, end, absolute=True)
+            days = call_days_between_dates(start, end, absolute=True)
+            logger.info("[REAL MCP] days_between_dates(%s, %s) -> %s", start, end, days)
+            return days
         except Exception:
-            logger.exception("Real MCP call failed; falling back to legacy implementation.")
-            return compute_days_between_dates_legacy(start, end)
+            logger.exception("Real MCP call failed.")
+            if allow_fallback:
+                logger.warning("Falling back to legacy because ALLOW_MCP_FALLBACK=1")
+                return compute_days_between_dates_legacy(start, end)
+            raise  # strict mode: fail loudly
 
     return compute_days_between_dates_legacy(start, end)
