@@ -9,6 +9,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -36,4 +37,9 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+
+# Project-specific
+*.bundle
+submission.zip
+src/eval/eval_report.json
 
