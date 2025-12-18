@@ -800,8 +800,39 @@ After further negotiation, the parties agree as follows:
 
   - It is only alluded to briefly in settlement correspondence.  
 
-- This makes it a good **“needle” fact** for retrieval experiments and
+- This makes it a good **"needle" fact** for retrieval experiments and
 
   evaluation questions such as:
 
-  - “Did the insured refuse ambulance transport at the scene?”
+  - "Did the insured refuse ambulance transport at the scene?"
+
+---
+
+## Appendix — Structured Tables (for bonus)
+
+### Table 1 — Event Ledger
+
+| Date | Event | Document | Notes |
+|------|-------|----------|-------|
+| 2024-01-03 19:40 | Motor vehicle collision at Jaffa Road and Shlomzion HaMalka Street | High-Resolution Incident Log | Single vehicle lost control, struck parked Honda Civic |
+| 2024-01-03 20:03:11 | Emergency call to Magen Insurance hotline | Emergency Call & FNOL Transcript | Initial loss report initiated by Dana Cohen |
+| 2024-01-04 09:15 | Emergency Room visit at Shaare Zedek Medical Center | Emergency Room Report | Diagnosis: cervical and lumbar strain |
+| 2024-01-05 | Initial Loss Report (FNOL) finalized | Structured Intake Note | Document created by Yael Ben-Haim, Claims Representative |
+| 2024-02-01 | Field adjuster site visit and vehicle inspection | Adjuster Site Visit Report | Adjuster: Amir Levi; vehicle damage assessed |
+| 2024-02-12 | First physiotherapy session | Physiotherapy Progress Report | Rehavia Physical Therapy Center; pain level 6/10 |
+| 2024-03-10 | Return to part-time work | Work and Functional Capacity Note | 4-hour days at Talpiot Analytics Ltd. |
+| 2024-04-05 | Final physiotherapy session | Physiotherapy Progress Report | Session 10; pain reduced to 2-3/10 |
+| 2024-05-20 | Bodily injury claim settled | Settlement Email Thread | Final settlement agreement reached |
+
+### Table 2 — Expenses / Payments Ledger
+
+| Date | Item | Amount | Document | Notes |
+|------|------|--------|----------|-------|
+| 2024-02-01 | Vehicle repair estimate | NIS 18,400 | Adjuster Site Visit Report | Approved by adjuster Amir Levi |
+| 2024-02-01 | Deductible payment | NIS 1,800 | Adjuster Site Visit Report | Applied to vehicle damage claim |
+| 2024-05-20 | Bodily injury settlement | NIS 45,000 | Settlement Email Thread | Full and final settlement agreement |
+| 2024-02-12 to 2024-04-05 | Physiotherapy treatment | 10 sessions | Physiotherapy Progress Report | Rehavia Physical Therapy Center |
+| 2024-01-04 | Emergency Room visit | N/A | Emergency Room Report | Shaare Zedek Medical Center; discharge at 10:42 |
+| 2024-01-03 19:40 | Property damage to parked vehicle | N/A | High-Resolution Incident Log | Silver Honda Civic (plate unknown) |
+| 2024-01-03 19:40 | Municipal property damage | N/A | High-Resolution Incident Log | Light pole on pavement edge |
+| 2024-02-01 | Vehicle inspection and assessment | N/A | Adjuster Site Visit Report | Field adjuster site visit completed |

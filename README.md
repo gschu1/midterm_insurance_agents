@@ -541,6 +541,78 @@ python scripts\ensure_claim_pdf.py
 
 The script will automatically append appendix sections if needed to reach the minimum page count.
 
+7.5 Table bonus + evaluation screenshot + screen recording
+
+The system includes table-aware indexing and evaluation metrics for structured data retrieval.
+
+**Table-aware indexing:**
+
+The claim timeline document (`data/claim_timeline.md`) includes structured markdown tables in the "Appendix — Structured Tables" section:
+- **Table 1 — Event Ledger**: Chronological events with dates, descriptions, documents, and notes
+- **Table 2 — Expenses / Payments Ledger**: Financial transactions with dates, items, amounts, and documents
+
+During indexing (`src/indexing.py`), markdown tables are automatically detected and each row is serialized into a "row sentence" format (e.g., "Date: 2024-01-03, Event: Motor vehicle collision, Document: High-Resolution Incident Log, Notes: Single vehicle lost control"). Table rows are indexed as atomic units with metadata (`node_type: "table_row"`, `table: "Event Ledger"`, `row_index: 0`) to ensure they remain intact during retrieval.
+
+**Running the main demo:**
+
+```powershell
+python .\src\main.py
+```
+
+**Debug mode (show source node metadata):**
+
+To see which nodes are retrieved (including table_row nodes), enable debug mode:
+
+```powershell
+$env:DEBUG_SOURCES="1"
+python .\src\main.py
+```
+
+This prints the top 3 source nodes with metadata (node_type, table, row_index) after each query.
+
+**Recommended questions to ask (for screen recording):**
+
+1. **Overview/summarization question:**
+   - "Give me a brief overview of the claim, including the main events and dates."
+
+2. **Needle fact question:**
+   - "Did the insured refuse ambulance transport at the scene?"
+
+3. **Table fact question:**
+   - "What was the amount of the vehicle repair estimate?"
+   - Or: "On what date did the first physiotherapy session occur?"
+
+**Running the evaluation judge:**
+
+```powershell
+python .\src\eval\judge.py
+```
+
+The judge outputs three metrics per test case:
+- **llm_correctness**: LLM-as-a-judge score (1-5) for factual correctness
+- **exact_match**: Boolean (0/1) indicating exact match after normalization
+- **context_hit**: Boolean (0/1) indicating whether retrieved context contains the ground-truth substring
+
+The judge prints a compact summary table to the terminal suitable for screenshot:
+
+```
+Summary Metrics (averages over all test cases):
+Metric               Value     
+------------------------------
+llm_correctness      4.25      
+exact_match          0.75      
+context_hit          0.91      
+relevance_score      4.10      
+recall_score         4.30      
+```
+
+An evaluation report is also written to `eval/eval_report.json` containing per-test results and summary averages.
+
+**Important for screen recording:**
+- Do not show the OpenAI API key in the recording
+- Ensure the `.env` file is not visible or mentioned
+- The evaluation metrics table is designed to be screenshot-friendly
+
 8. Limitations and possible extensions
 Current limitations:
 

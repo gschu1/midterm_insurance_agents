@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -38,6 +39,46 @@ def build_judge_client() -> OpenAI:
     return OpenAI()
 
 
+def normalize_text(text: str) -> str:
+    """
+    Normalize text for exact matching: lowercase, remove punctuation, normalize whitespace.
+    """
+    # Remove punctuation and convert to lowercase
+    text = re.sub(r'[^\w\s]', '', text.lower())
+    # Normalize whitespace
+    text = ' '.join(text.split())
+    return text
+
+
+def compute_exact_match(system_answer: str, ground_truth: str) -> bool:
+    """
+    Compute exact match (0 or 1) after normalization.
+    """
+    norm_system = normalize_text(system_answer)
+    norm_ground = normalize_text(ground_truth)
+    return norm_system == norm_ground
+
+
+def compute_context_hit(context_text: str, ground_truth: str) -> bool:
+    """
+    Check if the retrieved context contains the ground-truth substring (after normalization).
+    """
+    norm_context = normalize_text(context_text)
+    norm_ground = normalize_text(ground_truth)
+    # Check if ground truth (or key parts) appear in context
+    # For short ground truths, check exact substring
+    if len(norm_ground) < 20:
+        return norm_ground in norm_context
+    # For longer ground truths, check if key words/phrases appear
+    ground_words = set(norm_ground.split())
+    context_words = set(norm_context.split())
+    # Require at least 70% of ground truth words to appear
+    if len(ground_words) > 0:
+        overlap = len(ground_words & context_words) / len(ground_words)
+        return overlap >= 0.7
+    return False
+
+
 def judge_case(
     client: OpenAI,
     question: str,
@@ -47,9 +88,13 @@ def judge_case(
 ) -> Dict[str, Any]:
     """
     Call an LLM-as-a-judge to score:
-    - correctness: 1–5
+    - correctness: 1–5 (renamed to llm_correctness)
     - relevance:   1–5
     - recall:      1–5
+
+    Also computes:
+    - exact_match: 0 or 1 (boolean)
+    - context_hit: 0 or 1 (boolean)
 
     Returns a dict with scores and explanations.
     """
@@ -100,13 +145,23 @@ def judge_case(
     except json.JSONDecodeError:
         # Fallback: wrap the raw content if parsing fails.
         data = {
-            "correctness_score": None,
+            "llm_correctness": None,
             "relevance_score": None,
             "recall_score": None,
             "correctness_explanation": content,
             "relevance_explanation": "",
             "recall_explanation": "",
         }
+    
+    # Rename correctness_score to llm_correctness for clarity
+    if "correctness_score" in data:
+        data["llm_correctness"] = data.pop("correctness_score")
+    if "correctness_explanation" in data:
+        data["llm_correctness_explanation"] = data.pop("correctness_explanation")
+    
+    # Compute exact_match and context_hit
+    data["exact_match"] = 1 if compute_exact_match(system_answer, ground_truth) else 0
+    data["context_hit"] = 1 if compute_context_hit(context_text, ground_truth) else 0
 
     return data
 
@@ -155,24 +210,64 @@ def run_evaluation():
         results.append(record)
 
         print(f"System answer: {system_answer}")
+        llm_corr = judge_result.get('llm_correctness', judge_result.get('correctness_score', 'N/A'))
         print(
-            f"Scores: correctness={judge_result['correctness_score']}, "
-            f"relevance={judge_result['relevance_score']}, "
-            f"recall={judge_result['recall_score']}"
+            f"Metrics: llm_correctness={llm_corr}, "
+            f"exact_match={judge_result.get('exact_match', 0)}, "
+            f"context_hit={judge_result.get('context_hit', 0)}"
         )
 
-    # Compute simple averages
-    scored = [r for r in results if r["correctness_score"] is not None]
+    # Compute simple averages for all metrics
+    scored = [r for r in results if r.get("llm_correctness") is not None or r.get("correctness_score") is not None]
+    
+    # Initialize averages
+    avg_llm_corr = 0.0
+    avg_rel = 0.0
+    avg_rec = 0.0
+    avg_exact = 0.0
+    avg_context = 0.0
+    
     if scored:
-        avg_corr = sum(r["correctness_score"] for r in scored) / len(scored)
-        avg_rel = sum(r["relevance_score"] for r in scored) / len(scored)
-        avg_rec = sum(r["recall_score"] for r in scored) / len(scored)
+        # Handle both old and new field names
+        llm_scores = [r.get("llm_correctness") or r.get("correctness_score") for r in scored]
+        valid_llm_scores = [s for s in llm_scores if s is not None]
+        avg_llm_corr = sum(valid_llm_scores) / len(valid_llm_scores) if valid_llm_scores else 0.0
+        avg_rel = sum(r.get("relevance_score", 0) for r in scored) / len(scored) if scored else 0.0
+        avg_rec = sum(r.get("recall_score", 0) for r in scored) / len(scored) if scored else 0.0
+    
+    if results:
+        avg_exact = sum(r.get("exact_match", 0) for r in results) / len(results)
+        avg_context = sum(r.get("context_hit", 0) for r in results) / len(results)
 
-        print("\n" + "=" * 80)
-        print("Average scores over all test cases:")
-        print(f"- Correctness: {avg_corr:.2f}")
-        print(f"- Relevance:   {avg_rel:.2f}")
-        print(f"- Recall:      {avg_rec:.2f}")
+    print("\n" + "=" * 80)
+    print("Summary Metrics (averages over all test cases):")
+    print(f"{'Metric':<20} {'Value':<10}")
+    print("-" * 30)
+    print(f"{'llm_correctness':<20} {avg_llm_corr:<10.2f}")
+    print(f"{'exact_match':<20} {avg_exact:<10.2f}")
+    print(f"{'context_hit':<20} {avg_context:<10.2f}")
+    if scored:
+        print(f"{'relevance_score':<20} {avg_rel:<10.2f}")
+        print(f"{'recall_score':<20} {avg_rec:<10.2f}")
+    
+    # Write eval_report.json
+    report_path = PROJECT_ROOT / "eval" / "eval_report.json"
+    summary = {
+        "total_cases": len(results),
+        "averages": {
+            "llm_correctness": avg_llm_corr,
+            "exact_match": avg_exact,
+            "context_hit": avg_context,
+            "relevance_score": avg_rel,
+            "recall_score": avg_rec,
+        },
+        "results": results,
+    }
+    
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
+    
+    print(f"\n✅ Evaluation report written to: {report_path}")
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, List
 
 from llama_index.core.query_engine import BaseQueryEngine  # pyright: ignore[reportMissingImports]
@@ -73,6 +74,22 @@ class NeedleAgent:
                 )
             except AttributeError:
                 pass
+
+        # Debug mode: print top 3 source nodes with metadata
+        if os.getenv("DEBUG_SOURCES") == "1":
+            print("\n[DEBUG] Top 3 source nodes:")
+            for i, sn in enumerate(getattr(response, "source_nodes", [])[:3], 1):
+                try:
+                    node = sn.node
+                    metadata = node.metadata if hasattr(node, "metadata") else {}
+                    node_type = metadata.get("node_type", "regular")
+                    table = metadata.get("table", "-")
+                    row_index = metadata.get("row_index", "-")
+                    node_id = sn.node_id if hasattr(sn, "node_id") else "-"
+                    score = sn.score if hasattr(sn, "score") else "-"
+                    print(f"  {i}. node_id={node_id[:20]}... | type={node_type} | table={table} | row={row_index} | score={score}")
+                except Exception:
+                    print(f"  {i}. [error reading node]")
 
         return {
             "agent": "needle",
