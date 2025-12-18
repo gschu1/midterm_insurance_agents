@@ -559,6 +559,17 @@ During indexing (`src/indexing.py`), markdown tables are automatically detected 
 python .\src\main.py
 ```
 
+**Debug mode (show source node metadata):**
+
+To see which nodes are retrieved (including table_row nodes), enable debug mode:
+
+```powershell
+$env:DEBUG_SOURCES="1"
+python .\src\main.py
+```
+
+This prints the top 3 source nodes with metadata (node_type, table, row_index) after each query.
+
 **Recommended questions to ask (for screen recording):**
 
 1. **Overview/summarization question:**
