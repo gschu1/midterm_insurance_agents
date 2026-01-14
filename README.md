@@ -666,84 +666,60 @@ An evaluation report is also written to `eval/eval_report.json` containing per-t
 - Ensure the `.env` file is not visible or mentioned
 - The evaluation metrics table is designed to be screenshot-friendly
 
-8. Lesson-19 Eval Harness (add-on — additive, no changes to app)
+8. Lesson-19 Eval Harness (Add-On, No-Drift)
 
-This section documents the Lesson-19 evaluation harness add-on. **This harness is ADDITIVE ONLY** — it does not modify any existing app code, agents, or logic.
+This section documents the Lesson-19 eval_harness add-on. **It is additive only**: it evaluates the existing agents without modifying them.
 
-8.1 What it does
+8.1 What it is
 
-The evaluation harness provides:
-- **Hard tests (20–25)**: deterministic checks for needle + table tasks only
-- **LLM-based tests (10–15)**: rubric-based judging with JSON schema validation (includes summary)
-- **HITL tests (5–7)**: export/import workflow for human labeling (includes summary)
+An additive evaluation harness for the existing agents (needle/table/summary). It implements three eval types: deterministic hard checks, LLM-as-judge rubric scoring, and Human-in-the-Loop (HITL). The summarizer is evaluated only via model + HITL (no hard exact-match), per course guidance.
 
-All evaluation artifacts are stored in `eval_harness/runs/` (gitignored) with proof-carrying JSON files for each run.
+8.2 Files and artifacts
 
-8.2 What it does NOT change
+Task files:
+- `eval_harness/tasks/code.jsonl`
+- `eval_harness/tasks/model.jsonl`
+- `eval_harness/tasks/hitl.jsonl`
 
-The harness:
-- Does NOT modify existing agent code (`src/agents/*`)
-- Does NOT change indexing logic (`src/indexing.py`)
-- Does NOT alter the main entry point (`src/main.py`)
-- Does NOT refactor existing evaluation code (`src/eval/*`)
-- Does NOT change any interfaces or function signatures
+Run artifacts (gitignored):
+- `eval_harness/runs/<run_id>/report.json`
+- `eval_harness/runs/<run_id>/transcripts/*.json`
 
-The harness is a pure add-on that imports and uses existing code as-is.
+8.3 How to run
 
-8.3 Commands
-
-**Run hard suite (code):**
 ```powershell
-python -m eval_harness.run --suite code --k 1
-```
+# Activate venv (Windows PowerShell)
+.\.venv\Scripts\Activate.ps1
 
-**Run LLM judge suite (model):**
-```powershell
+# Run suites
+python -m eval_harness.run --suite code  --k 1
 python -m eval_harness.run --suite model --k 1
+python -m eval_harness.run --suite hitl  --k 1
+python -m eval_harness.run --suite all   --k 1
 ```
 
-**Run HITL suite (export pack):**
-```powershell
-python -m eval_harness.run --suite hitl --k 1
-```
+8.4 HITL workflow
 
-**Import labeled HITL results:**
+Run the HITL suite to export a labeling pack in the run folder (e.g., `hitl_export.jsonl`). Humans label offline (score/pass_fail/comment). Import labels via CLI:
 ```powershell
 python -m eval_harness.run --suite hitl --k 1 --hitl-labels path\to\labeled.jsonl
 ```
+The Streamlit UI can also import labeled JSONL files in the Lesson-19 Eval Harness tab.
 
-8.4 Artifact storage
+8.5 Relationship to original judge + Streamlit UI
 
-All generated artifacts are stored in `eval_harness/runs/<run_id>/`:
-- `config.json`
-- `results_code.json`
-- `results_model.json`
-- `results_hitl.json`
-- `report.json`
-- `transcripts/`
-- `hitl_export.jsonl` (exported pack)
-- `hitl_summary.json` (after import)
+- Original midterm judge remains at `src/eval/judge.py`:
+  ```powershell
+  python .\src\eval\judge.py
+  ```
+- Streamlit UI is optional and can run both the original judge and the Lesson-19 harness:
+  ```powershell
+  streamlit run streamlit_app.py
+  ```
 
-8.5 Task specifications
+8.6 No-Drift Guarantee
 
-Tasks are defined in JSONL format:
-- `eval_harness/tasks/code.jsonl`: hard tests (needle + table only)
-- `eval_harness/tasks/model.jsonl`: LLM judge tests (includes summary)
-- `eval_harness/tasks/hitl.jsonl`: HITL tests (includes summary)
-
-Each task specifies:
-- `id`: Unique identifier
-- `type`: summary | needle | table
-- `question`: Input question
-- Suite-specific fields (`expected`, `rubric`, `label_schema`, etc.)
-
-8.6 Architecture
-
-The harness is organized as:
-- `eval_harness/run.py`: CLI entry point
-- `eval_harness/adapter.py`: calls existing `ManagerAgent.answer()` without modifications
-- `eval_harness/graders/`: code graders, LLM judge, HITL export/import
-- `eval_harness/schemas/`: JSON schemas for judge and HITL labels
+This harness is additive; it calls the existing system without modifying agent logic.
 
 9. Limitations and possible extensions
 Current limitations:
