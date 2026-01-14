@@ -245,7 +245,7 @@ with tab3:
             if success and report_exists:
                 # Full success
                 status = "success"
-            elif not success but report_exists:
+            elif not success and report_exists:
                 # Completed with warnings (non-zero exit but report generated)
                 status = "warning"
             else:
