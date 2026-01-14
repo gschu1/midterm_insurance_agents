@@ -42,4 +42,5 @@ Thumbs.db
 *.bundle
 submission.zip
 src/eval/eval_report.json
+eval_harness/runs/
 

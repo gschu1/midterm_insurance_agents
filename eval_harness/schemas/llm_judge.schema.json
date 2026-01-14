@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "score_1_to_5",
+    "verdict",
+    "rationale",
+    "cites_evidence"
+  ],
+  "properties": {
+    "score_1_to_5": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["pass", "fail"]
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cites_evidence": {
+      "type": "boolean"
+    },
+    "insufficient_evidence": {
+      "type": "boolean"
+    }
+  }
+}
+

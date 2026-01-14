@@ -1,0 +1,23 @@
+{"id":"code-01","type":"needle","question":"On what date did the accident occur?","notes":"Structured intake note","expected":{"value":"2024-01-03","normalizer":"iso_date"}}
+{"id":"code-02","type":"needle","question":"At what intersection did the collision occur?","notes":"Structured intake note","expected":{"contains":["Jaffa","Shlomzion HaMalka"]}}
+{"id":"code-03","type":"needle","question":"Which hospital treated the insured after the accident?","notes":"ER report","expected":{"contains":["Shaare Zedek"]}}
+{"id":"code-04","type":"needle","question":"What was the policy number?","notes":"Structured intake note","expected":{"regex":["AC-2023-8742"]}}
+{"id":"code-05","type":"needle","question":"What vehicle make/model was involved?","notes":"Structured intake note","expected":{"contains":["2019 Mazda 3"]}}
+{"id":"code-06","type":"needle","question":"What is the insured vehicle's license plate number?","notes":"Structured intake note","expected":{"regex":["71-234-56"]}}
+{"id":"code-07","type":"needle","question":"Did the insured refuse ambulance transport at the scene?","notes":"Incident log","expected":{"value":"yes","normalizer":"yes_no"}}
+{"id":"code-08","type":"needle","question":"Which ambulance unit was dispatched to the scene?","notes":"Incident log","expected":{"contains":["A-12"]}}
+{"id":"code-09","type":"needle","question":"Which police unit arrived at the intersection?","notes":"Incident log","expected":{"contains":["P-34"]}}
+{"id":"code-10","type":"needle","question":"What was the emergency call ID number?","notes":"Incident log","expected":{"contains":["ES-2024-11739"]}}
+{"id":"code-11","type":"needle","question":"On what date was the ER visit?","notes":"ER report","expected":{"value":"2024-01-04","normalizer":"iso_date"}}
+{"id":"code-12","type":"needle","question":"At what time was the patient discharged from the ER?","notes":"ER report","expected":{"regex":["\\b10:42\\b"]}}
+{"id":"code-13","type":"needle","question":"How many physiotherapy sessions were attended?","notes":"Physiotherapy report","expected":{"value":10,"normalizer":"integer"}}
+{"id":"code-14","type":"needle","question":"On what date did the first physiotherapy session occur?","notes":"Physiotherapy report","expected":{"value":"2024-02-12","normalizer":"iso_date"}}
+{"id":"code-15","type":"needle","question":"When did the insured return to part-time work?","notes":"Physiotherapy + work note","expected":{"value":"2024-03-10","normalizer":"iso_date"}}
+{"id":"code-16","type":"needle","question":"What was the employer name?","notes":"Work and functional capacity note","expected":{"contains":["Talpiot Analytics Ltd."]}}
+{"id":"code-17","type":"table","question":"What was the vehicle repair estimate amount?","notes":"Expenses/Payments ledger","expected":{"value":18400,"normalizer":"nis_amount","tolerance":0.1}}
+{"id":"code-18","type":"table","question":"What was the deductible payment amount?","notes":"Expenses/Payments ledger","expected":{"value":1800,"normalizer":"nis_amount","tolerance":0.1}}
+{"id":"code-19","type":"table","question":"What was the bodily injury settlement amount?","notes":"Expenses/Payments ledger","expected":{"value":45000,"normalizer":"nis_amount","tolerance":0.1}}
+{"id":"code-20","type":"table","question":"What date was the vehicle repair estimate recorded in the ledger?","notes":"Expenses/Payments ledger","expected":{"value":"2024-02-01","normalizer":"iso_date"}}
+{"id":"code-21","type":"table","question":"What date was the deductible payment recorded in the ledger?","notes":"Expenses/Payments ledger","expected":{"value":"2024-02-01","normalizer":"iso_date"}}
+{"id":"code-22","type":"table","question":"What date was the bodily injury settlement recorded in the ledger?","notes":"Expenses/Payments ledger","expected":{"value":"2024-05-20","normalizer":"iso_date"}}
+

@@ -564,6 +564,7 @@ The UI will open in your browser. Use the tabs to:
 - **Run Quick Demo Questions**: Copy recommended questions for screen recording
 - **Single Question (UI)**: Ask a single question via subprocess wrapper (convenience feature; CLI recommended for best results)
 - **Run Evaluation (Judge)**: Execute the evaluation judge and view results
+- **Lesson-19 Eval Harness**: Run hard/model/HITL suites and view counts clearly
 - **Artifacts & Submission Map**: Check that all required artifacts are present
 
 **Screenshot for submission:**
@@ -665,18 +666,18 @@ An evaluation report is also written to `eval/eval_report.json` containing per-t
 - Ensure the `.env` file is not visible or mentioned
 - The evaluation metrics table is designed to be screenshot-friendly
 
-8. Evaluation harness (Lesson 19 add-on — additive, no changes to app)
+8. Lesson-19 Eval Harness (add-on — additive, no changes to app)
 
-This section documents the evaluation harness add-on that satisfies Lesson 19 requirements. **This harness is ADDITIVE ONLY** — it does not modify any existing app code, agents, or logic.
+This section documents the Lesson-19 evaluation harness add-on. **This harness is ADDITIVE ONLY** — it does not modify any existing app code, agents, or logic.
 
 8.1 What it does
 
 The evaluation harness provides:
-- **20 code-based eval units**: Fast, objective checks using regex, substring matching, forbidden patterns, context hit detection, and source type verification
-- **15–20 model-based eval units**: LLM-as-judge with structured JSON output and schema validation
-- **10 human-in-the-loop eval units**: Export/import workflow for human labeling with agreement metrics
+- **Hard tests (20–25)**: deterministic checks for needle + table tasks only
+- **LLM-based tests (10–15)**: rubric-based judging with JSON schema validation (includes summary)
+- **HITL tests (5–7)**: export/import workflow for human labeling (includes summary)
 
-All evaluation artifacts are stored in `eval_harness/runs/` (gitignored) with proof-carrying JSON files for each trial.
+All evaluation artifacts are stored in `eval_harness/runs/` (gitignored) with proof-carrying JSON files for each run.
 
 8.2 What it does NOT change
 
@@ -691,128 +692,58 @@ The harness is a pure add-on that imports and uses existing code as-is.
 
 8.3 Commands
 
-**Run code suite (20 tasks, k=1 by default):**
+**Run hard suite (code):**
 ```powershell
 python -m eval_harness.run --suite code --k 1
 ```
 
-**Run model suite (15 tasks, k=3 by default):**
+**Run LLM judge suite (model):**
 ```powershell
-python -m eval_harness.run --suite model --k 3
+python -m eval_harness.run --suite model --k 1
 ```
 
-**Run HITL suite (10 tasks, k=1 by default):**
+**Run HITL suite (export pack):**
 ```powershell
 python -m eval_harness.run --suite hitl --k 1
 ```
 
-**Limit number of tasks (for testing):**
+**Import labeled HITL results:**
 ```powershell
-python -m eval_harness.run --suite code --limit 3
-```
-
-**Export HITL tasks for human labeling:**
-```powershell
-python -m eval_harness.hitl.export_hitl --output hitl_export.csv
-```
-
-**Import labeled HITL tasks:**
-```powershell
-python -m eval_harness.hitl.import_hitl --file labeled.csv --run <run_id>
+python -m eval_harness.run --suite hitl --k 1 --hitl-labels path\to\labeled.jsonl
 ```
 
 8.4 Artifact storage
 
 All generated artifacts are stored in `eval_harness/runs/<run_id>/`:
-- `trials/<task_id>__t<trial>.json`: Individual trial results with inputs, outputs, sources, and grades
-- `report.json`: Aggregated metrics and summary
+- `config.json`
+- `results_code.json`
+- `results_model.json`
+- `results_hitl.json`
+- `report.json`
+- `transcripts/`
+- `hitl_export.jsonl` (exported pack)
+- `hitl_summary.json` (after import)
 
-Each trial JSON includes:
-- Task ID, suite, trial index, timestamp, git commit
-- Input question and payload
-- System answer, chosen agent, retrieved sources
-- Outcome checks (for code graders)
-- Grader outputs (code grades, model judge grades, HITL labels)
-- Model/provider metadata
-
-8.5 Metrics
-
-The harness reports:
-- **pass@1**: Fraction of tasks that pass on the first trial
-- **pass@k**: Fraction of tasks that pass on at least one trial
-- **pass^k**: Fraction of tasks that pass on ALL trials
-
-Output is formatted as a screenshot-friendly table suitable for documentation.
-
-8.6 Missing API keys
-
-If `OPENAI_API_KEY` is not set when running the model suite:
-- The harness prints a clear message: "⚠️ OPENAI_API_KEY not set - skipping model judge"
-- Model judge grades are marked with `uncertainty_flag: true`
-- The suite continues gracefully (no stacktrace)
-- Code and HITL suites run normally without API keys
-
-8.7 Task specifications
+8.5 Task specifications
 
 Tasks are defined in JSONL format:
-- `eval_harness/tasks/code.jsonl`: 20 code-based tasks
-- `eval_harness/tasks/model.jsonl`: 15 model-based tasks
-- `eval_harness/tasks/hitl.jsonl`: 10 HITL tasks
+- `eval_harness/tasks/code.jsonl`: hard tests (needle + table only)
+- `eval_harness/tasks/model.jsonl`: LLM judge tests (includes summary)
+- `eval_harness/tasks/hitl.jsonl`: HITL tests (includes summary)
 
 Each task specifies:
-- `task_id`: Unique identifier
-- `suite`: "code", "model", or "hitl"
+- `id`: Unique identifier
+- `type`: summary | needle | table
 - `question`: Input question
-- Suite-specific fields (expected_regex, rubric, rubric_fields, etc.)
-- `ground_truth`: Reference answer (for context hit checks and human reference)
+- Suite-specific fields (`expected`, `rubric`, `label_schema`, etc.)
 
-8.8 Screenshot results
-
-After running a suite, the summary report is printed to stdout in a format suitable for screenshots:
-
-```
-================================================================================
-Evaluation Summary - CODE Suite
-================================================================================
-
-Run directory: eval_harness/runs/code_20240101_120000
-
-Metrics:
-Metric               Value          
------------------------------------
-pass@1               0.850          
-pass@k               0.900          
-pass^k               0.800          
-total_tasks          20             
-total_trials         20             
-k (trials per task)  1              
-================================================================================
-```
-
-8.9 Architecture
+8.6 Architecture
 
 The harness is organized as:
 - `eval_harness/run.py`: CLI entry point
-- `eval_harness/runner.py`: Adapter that calls existing `ManagerAgent.answer()` without modifications
-- `eval_harness/graders/`: Code graders and model judge
-- `eval_harness/report.py`: Metrics aggregation and reporting
-- `eval_harness/hitl/`: HITL export/import tools
-- `eval_harness/types.py`: Data models (TaskSpec, TrialResult, GradeResult, etc.)
-- `eval_harness/schemas/`: JSON schema for model judge output
-
-8.10 Verification
-
-To verify the harness works and confirm no drift:
-```powershell
-# Compile check
-python -m compileall .
-
-# Run demo (3 tasks)
-python -m eval_harness.run --suite code --limit 3
-
-# Check that no existing files were modified
-git status
-```
+- `eval_harness/adapter.py`: calls existing `ManagerAgent.answer()` without modifications
+- `eval_harness/graders/`: code graders, LLM judge, HITL export/import
+- `eval_harness/schemas/`: JSON schemas for judge and HITL labels
 
 9. Limitations and possible extensions
 Current limitations:
