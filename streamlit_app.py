@@ -37,18 +37,25 @@ with st.sidebar:
     st.warning("⚠️ **Do NOT show your API key on screen.**")
     
     st.subheader("MCP Configuration")
+    with st.popover("ℹ️ Explain", help="What MCP Configuration means"):
+        st.markdown(
+            "Model Context Protocol (MCP) standardizes how models call external tools/services (we use it for date arithmetic). "
+            "These toggles choose real MCP vs local fallback behavior for demos and proof. "
+            "[Anthropic MCP overview](https://www.anthropic.com/news/model-context-protocol) • "
+            "[MCP specification](https://modelcontextprotocol.io/)"
+        )
     use_real_mcp = st.selectbox(
         "USE_REAL_MCP",
         options=["0", "1"],
         index=0,
-        help="Set to 1 to use real MCP server (grader-proof mode)"
+        help="Use the real MCP server for tool calls; when off, the system uses the local fallback tool."
     )
     
     allow_mcp_fallback = st.selectbox(
         "ALLOW_MCP_FALLBACK",
         options=["0", "1"],
         index=1,
-        help="Set to 0 for strict mode (no fallback to legacy)"
+        help="If real MCP fails, allow local fallback; turn off for strict proof with no fallback."
     )
     
     st.subheader("Debug Options")
@@ -56,11 +63,19 @@ with st.sidebar:
         "DEBUG_SOURCES",
         options=["0", "1"],
         index=0,
-        help="Set to 1 to show source node metadata"
+        help="Show retrieval sources; for table bonus this reveals table_row nodes as evidence."
     )
     
     st.subheader("Evaluation Settings")
     st.info("k_trials supported in Lesson-19 eval harness (see harness tab).")
+    k_trials = st.number_input(
+        "k_trials (model eval repeats)",
+        min_value=1,
+        max_value=5,
+        value=1,
+        step=1,
+        help="Repeat model-judge evals k times to measure non-determinism (pass@k).",
+    )
     
     st.markdown("---")
     st.markdown("### 📝 Notes")
@@ -531,6 +546,12 @@ with tab3:
 # Tab 4: Lesson-19 Eval Harness
 with tab4:
     st.header("Lesson-19 Eval Harness")
+    with st.popover("ℹ️ Explain", help="What the Lesson-19 Eval Harness covers"):
+        st.markdown(
+            "This add-on provides three evaluation types: deterministic code graders, LLM-as-judge rubric scoring, and "
+            "human-in-the-loop (HITL) labeling. Summaries are evaluated only with model/HITL (no exact-match hard tests). "
+            "[Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)"
+        )
     st.markdown("""
     **Hard tests: 20–25 (needle + table only)**  
     **LLM-based tests: 10–15 (includes summary)**  
@@ -538,7 +559,7 @@ with tab4:
     """)
 
     st.info("""
-    **How to demo to Daniel**
+    **How to demo**
     1) Ask 2–3 live questions  
     2) Run original judge  
     3) Run hard suite  
@@ -549,9 +570,19 @@ with tab4:
     task_counts = get_task_counts()
 
     st.markdown("### Hard Tests (20–25)")
+    with st.popover("ℹ️ Explain", help="What the Hard Tests suite does"):
+        st.markdown(
+            "Hard tests are deterministic checks (regex/substring/value) for needle and table questions only. "
+            "A test passes when the normalized answer satisfies the expected check."
+        )
     st.caption("Deterministic checks for needle + table only.")
     st.write(f"Total tasks: {task_counts.get('code', {}).get('total', 0)}")
-    if st.button("Run Hard Suite", key="run_hard_suite", type="primary"):
+    if st.button(
+        "Run Hard Suite",
+        key="run_hard_suite",
+        type="primary",
+        help="Runs deterministic graders for needle + table questions.",
+    ):
         command = [sys.executable, "-m", "eval_harness.run", "--suite", "code", "--k", "1"]
         success, stdout, stderr, return_code = run_with_env(command, "Eval harness (code)")
         if success or stdout:
@@ -583,10 +614,28 @@ with tab4:
 
     st.markdown("---")
     st.markdown("### LLM Judge (10–15)")
+    with st.popover("ℹ️ Explain", help="What the LLM Judge suite does"):
+        st.markdown(
+            "LLM Judge runs rubric-based scoring and validates strict JSON output. "
+            "A test passes when the judge returns verdict=pass with valid JSON."
+        )
     st.caption("LLM-as-judge with JSON schema validation; includes summary.")
     st.write(f"Total tasks: {task_counts.get('model', {}).get('total', 0)}")
-    if st.button("Run Model Suite", key="run_model_suite", type="primary"):
-        command = [sys.executable, "-m", "eval_harness.run", "--suite", "model", "--k", "1"]
+    if st.button(
+        "Run Model Suite",
+        key="run_model_suite",
+        type="primary",
+        help="Runs LLM-as-judge rubric scoring with JSON schema validation.",
+    ):
+        command = [
+            sys.executable,
+            "-m",
+            "eval_harness.run",
+            "--suite",
+            "model",
+            "--k",
+            str(int(k_trials)),
+        ]
         success, stdout, stderr, return_code = run_with_env(command, "Eval harness (model)")
         if success or stdout:
             st.success("Model suite completed.")
@@ -620,10 +669,19 @@ with tab4:
 
     st.markdown("---")
     st.markdown("### HITL (5–7)")
+    with st.popover("ℹ️ Explain", help="What the HITL suite does"):
+        st.markdown(
+            "HITL exports a labeling pack, collects human scores offline, then imports labels to compute pass rate and "
+            "average score."
+        )
     st.caption("Export a HITL packet, label it, then import for scoring.")
     st.write(f"Total tasks: {task_counts.get('hitl', {}).get('total', 0)}")
 
-    if st.button("Export HITL Pack", key="export_hitl_pack"):
+    if st.button(
+        "Export HITL Pack",
+        key="export_hitl_pack",
+        help="Creates a HITL labeling pack (JSONL) for offline grading.",
+    ):
         command = [sys.executable, "-m", "eval_harness.run", "--suite", "hitl", "--k", "1"]
         success, stdout, stderr, return_code = run_with_env(command, "Eval harness (hitl export)")
         if success or stdout:
@@ -646,8 +704,16 @@ with tab4:
                     mime="application/jsonl",
                 )
 
-    uploaded = st.file_uploader("Upload Labeled HITL File (.jsonl)", type=["jsonl"])
-    if st.button("Import and Score", key="import_hitl"):
+    uploaded = st.file_uploader(
+        "Upload Labeled HITL File (.jsonl)",
+        type=["jsonl"],
+        help="Upload a labeled HITL JSONL file to compute summary metrics.",
+    )
+    if st.button(
+        "Import and Score",
+        key="import_hitl",
+        help="Imports labeled HITL file and computes summary metrics.",
+    ):
         if not uploaded:
             st.warning("Upload a labeled HITL file first.")
         else:
