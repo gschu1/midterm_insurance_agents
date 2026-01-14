@@ -562,6 +562,7 @@ streamlit run streamlit_app.py
 
 The UI will open in your browser. Use the tabs to:
 - **Run Quick Demo Questions**: Copy recommended questions for screen recording
+- **Single Question (UI)**: Ask a single question via subprocess wrapper (convenience feature; CLI recommended for best results)
 - **Run Evaluation (Judge)**: Execute the evaluation judge and view results
 - **Artifacts & Submission Map**: Check that all required artifacts are present
 
@@ -578,6 +579,15 @@ After running the evaluation judge in the UI, screenshot the "Evaluation Results
 - **MCP strict mode proof**: Set `USE_REAL_MCP=1` and `ALLOW_MCP_FALLBACK=0` in sidebar, then check logs for `[REAL MCP]` lines
 - **Table bonus evidence**: Set `DEBUG_SOURCES=1` in sidebar when running table questions
 - **All other artifacts**: See the "Artifacts & Submission Map" tab for checklist
+
+**Windows note:** Evaluation output is ASCII-safe to avoid encoding issues. If you still encounter encoding problems, set `PYTHONIOENCODING=utf-8` in your environment before running.
+
+**Report path:** The evaluation report is generated at `src/eval/eval_report.json`. The UI automatically loads and displays this file after running the judge.
+
+**UI status definitions:**
+- **Success:** Judge completed with exit code 0 and report file exists
+- **Warning:** Judge returned non-zero exit code but report file exists (e.g., encoding warnings that don't prevent report generation)
+- **Failure:** Judge failed and no report file was generated
 
 **Note:** The UI is optional. All functionality is available via CLI commands (see sections 7.2 and 7.3 above).
 

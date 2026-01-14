@@ -68,7 +68,7 @@ with st.sidebar:
 
 
 # Helper function to run subprocess with env vars
-def run_with_env(command, description):
+def run_with_env(command, description, stdin_input=None):
     """Run a subprocess command with environment variables from sidebar."""
     env = os.environ.copy()
     env["USE_REAL_MCP"] = use_real_mcp
@@ -82,16 +82,21 @@ def run_with_env(command, description):
             env=env,
             capture_output=True,
             text=True,
-            executable=sys.executable
+            executable=sys.executable,
+            input=stdin_input,
+            timeout=300  # 5 minute timeout for safety
         )
-        return result.returncode == 0, result.stdout, result.stderr
+        return result.returncode == 0, result.stdout, result.stderr, result.returncode
+    except subprocess.TimeoutExpired:
+        return False, "", "Command timed out after 5 minutes", 1
     except Exception as e:
-        return False, "", str(e)
+        return False, "", str(e), 1
 
 
 # Tabs
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📝 Run Quick Demo Questions",
+    "❓ Single Question (UI)",
     "📊 Run Evaluation (Judge)",
     "✅ Artifacts & Submission Map"
 ])
@@ -142,8 +147,84 @@ with tab1:
     """)
 
 
-# Tab 2: Evaluation Judge
+# Tab 2: Single Question Q&A
 with tab2:
+    st.header("Single Question Q&A")
+    st.info("""
+    **Note:** This is a convenience wrapper. For best results, use the CLI: `python .\\src\\main.py`
+    
+    This UI attempts to run a single question through the system using subprocess.
+    """)
+    
+    question = st.text_area(
+        "Enter your question:",
+        placeholder="e.g., Did the insured refuse ambulance transport at the scene?",
+        height=100
+    )
+    
+    if st.button("🚀 Ask Question", type="primary"):
+        if not question.strip():
+            st.warning("Please enter a question.")
+        else:
+            with st.spinner("Processing question..."):
+                # Use subprocess to run main.py with stdin
+                main_script = REPO_ROOT / "src" / "main.py"
+                command = [sys.executable, str(main_script)]
+                
+                # Send question + exit command via stdin
+                stdin_input = f"{question.strip()}\nexit\n"
+                
+                success, stdout, stderr, return_code = run_with_env(command, "Single question", stdin_input=stdin_input)
+                
+                if success or stdout:
+                    st.success("✅ Question processed!")
+                    
+                    # Display output
+                    st.markdown("### Answer:")
+                    # Try to extract the answer from output
+                    # The output format is: [Chosen agent: ...] followed by answer
+                    lines = stdout.split('\n')
+                    answer_started = False
+                    answer_lines = []
+                    
+                    for line in lines:
+                        if '[Chosen agent:' in line or answer_started:
+                            answer_started = True
+                            if line.strip() and not line.startswith('['):
+                                answer_lines.append(line)
+                    
+                    if answer_lines:
+                        st.markdown('\n'.join(answer_lines))
+                    else:
+                        # Fallback: show all output
+                        st.text(stdout)
+                    
+                    # Show full output in expandable section
+                    with st.expander("📄 Full Output", expanded=False):
+                        st.text("STDOUT:")
+                        st.code(stdout)
+                        if stderr:
+                            st.text("STDERR:")
+                            st.code(stderr)
+                else:
+                    st.error("❌ Failed to process question")
+                    with st.expander("🔍 Error Details", expanded=True):
+                        st.text("STDOUT:")
+                        st.code(stdout)
+                        st.text("STDERR:")
+                        st.code(stderr)
+                    
+                    st.info("""
+                    **Tip:** If this doesn't work reliably, use the CLI instead:
+                    ```powershell
+                    python .\\src\\main.py
+                    ```
+                    Then type your question when prompted.
+                    """)
+
+
+# Tab 3: Evaluation Judge
+with tab3:
     st.header("Run Evaluation Judge")
     st.markdown("""
     This runs `src/eval/judge.py` which evaluates all test cases and generates `eval/eval_report.json`.
@@ -154,18 +235,32 @@ with tab2:
             judge_script = REPO_ROOT / "src" / "eval" / "judge.py"
             command = [sys.executable, str(judge_script)]
             
-            success, stdout, stderr = run_with_env(command, "Judge evaluation")
+            success, stdout, stderr, return_code = run_with_env(command, "Judge evaluation")
             
-            if success:
+            # Check if report exists regardless of exit code
+            eval_report_path = EVAL_DIR / "eval_report.json"
+            report_exists = eval_report_path.exists()
+            
+            # Determine status: success, warning, or failure
+            if success and report_exists:
+                # Full success
+                status = "success"
+            elif not success but report_exists:
+                # Completed with warnings (non-zero exit but report generated)
+                status = "warning"
+            else:
+                # Failure (no report)
+                status = "failure"
+            
+            if status == "success":
                 st.success("✅ Evaluation completed successfully!")
                 
                 # Show stdout in expandable section
                 with st.expander("📄 Evaluation Output", expanded=False):
                     st.text(stdout)
                 
-                # Try to load and display eval_report.json
-                eval_report_path = EVAL_DIR / "eval_report.json"
-                if eval_report_path.exists():
+                # Load and display eval_report.json
+                if report_exists:
                     try:
                         with open(eval_report_path, "r", encoding="utf-8") as f:
                             report = json.load(f)
@@ -244,11 +339,95 @@ with tab2:
                     except Exception as e:
                         st.error(f"Failed to parse eval_report.json: {e}")
                         st.code(str(e))
-                else:
-                    st.warning(f"⚠️ Expected report file not found: {eval_report_path}")
-                    st.info("The evaluation may have completed but the report file was not generated.")
             
-            else:
+            elif status == "warning":
+                # Non-zero exit but report exists - show warning banner
+                st.warning("⚠️ **Judge completed but returned a non-zero exit code; see error details below.**")
+                
+                # Still show results if report exists
+                try:
+                    with open(eval_report_path, "r", encoding="utf-8") as f:
+                        report = json.load(f)
+                    
+                    st.markdown("---")
+                    st.markdown("### 📊 Evaluation Results Summary")
+                    st.markdown("**📸 Screenshot this panel for submission**")
+                    
+                    # Summary metrics (same as success case)
+                    if "averages" in report:
+                        averages = report["averages"]
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric(
+                                "LLM Correctness",
+                                f"{averages.get('llm_correctness', 0):.2f}",
+                                help="LLM-as-judge correctness score (1-5)"
+                            )
+                        
+                        with col2:
+                            st.metric(
+                                "Exact Match",
+                                f"{averages.get('exact_match', 0):.2f}",
+                                help="Fraction of exact matches after normalization"
+                            )
+                        
+                        with col3:
+                            st.metric(
+                                "Context Hit",
+                                f"{averages.get('context_hit', 0):.2f}",
+                                help="Fraction where ground truth appears in retrieved context"
+                            )
+                        
+                        if "relevance_score" in averages or "recall_score" in averages:
+                            col4, col5 = st.columns(2)
+                            if "relevance_score" in averages:
+                                with col4:
+                                    st.metric(
+                                        "Relevance Score",
+                                        f"{averages['relevance_score']:.2f}",
+                                        help="Relevance of retrieved context (1-5)"
+                                    )
+                            if "recall_score" in averages:
+                                with col5:
+                                    st.metric(
+                                        "Recall Score",
+                                        f"{averages['recall_score']:.2f}",
+                                        help="Recall of key information (1-5)"
+                                    )
+                    
+                    # Per-test table
+                    st.markdown("---")
+                    st.markdown("### 📋 Per-Test Results")
+                    
+                    if "results" in report:
+                        results = report["results"]
+                        table_data = []
+                        for r in results:
+                            table_data.append({
+                                "ID": r.get("id", "N/A"),
+                                "Type": r.get("type", "N/A"),
+                                "Question": r.get("question", "")[:60] + "..." if len(r.get("question", "")) > 60 else r.get("question", ""),
+                                "LLM Correctness": r.get("llm_correctness", r.get("correctness_score", "N/A")),
+                                "Exact Match": r.get("exact_match", "N/A"),
+                                "Context Hit": r.get("context_hit", "N/A"),
+                            })
+                        st.dataframe(table_data, use_container_width=True, hide_index=True)
+                    
+                    st.info(f"✅ Report loaded from: `{eval_report_path.relative_to(REPO_ROOT)}`")
+                    
+                except Exception as e:
+                    st.error(f"Failed to parse eval_report.json: {e}")
+                    st.code(str(e))
+                
+                # Show error details in expandable section
+                with st.expander("🔍 Error Details (Non-zero Exit)", expanded=False):
+                    st.text("STDOUT:")
+                    st.code(stdout)
+                    st.text("STDERR:")
+                    st.code(stderr)
+            
+            else:  # status == "failure"
                 st.error("❌ Evaluation failed!")
                 
                 # Check for API key error
@@ -271,8 +450,8 @@ with tab2:
                         st.code(stderr)
 
 
-# Tab 3: Artifacts Checklist
-with tab3:
+# Tab 4: Artifacts Checklist
+with tab4:
     st.header("Artifacts & Submission Checklist")
     st.markdown("""
     This checklist maps project artifacts to Daniel's requirements.
