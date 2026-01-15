@@ -44,3 +44,10 @@ submission.zip
 src/eval/eval_report.json
 eval_harness/runs/
 
+# Local scratch/review artifacts
+.scratch/
+CLAUDE.md
+CLAUDE.MD
+HUMAN_REPORT.md
+tmpclaude-*
+
