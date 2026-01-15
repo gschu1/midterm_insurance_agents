@@ -163,6 +163,25 @@ def load_latest_report() -> Optional[Dict[str, Any]]:
     return data
 
 
+def find_latest_hitl_pack() -> Optional[Path]:
+    """Find the latest HITL export pack file."""
+    latest_dir = get_latest_run_dir()
+    if not latest_dir:
+        return None
+    
+    # Prefer known filename
+    known_path = latest_dir / "hitl_export.jsonl"
+    if known_path.exists():
+        return known_path
+    
+    # Otherwise, find newest *.jsonl with "hitl" in name
+    jsonl_files = list(latest_dir.glob("*hitl*.jsonl"))
+    if jsonl_files:
+        return max(jsonl_files, key=lambda p: p.stat().st_mtime)
+    
+    return None
+
+
 @st.cache_resource(show_spinner=False)
 def build_inprocess_manager():
     from eval_harness.adapter import get_manager
@@ -703,6 +722,175 @@ with tab4:
                     file_name=Path(export_path).name,
                     mime="application/jsonl",
                 )
+
+    # Integrated HITL Labeling UI
+    st.markdown("---")
+    st.markdown("#### Integrated Labeling")
+    st.caption("Label HITL tasks directly in the UI without offline editing.")
+    
+    # Initialize session state
+    if "hitl_labels" not in st.session_state:
+        st.session_state["hitl_labels"] = {}
+    
+    hitl_pack_path = find_latest_hitl_pack()
+    if not hitl_pack_path:
+        st.info("Export a HITL pack first to enable integrated labeling.")
+    else:
+        st.success(f"Found HITL pack: `{hitl_pack_path.name}`")
+        
+        if st.button("Open HITL Labeling UI", key="open_labeling_ui"):
+            st.session_state["hitl_labeling_open"] = True
+            st.session_state["hitl_pack_path"] = str(hitl_pack_path)
+        
+        if st.session_state.get("hitl_labeling_open") and st.session_state.get("hitl_pack_path"):
+            pack_path = Path(st.session_state["hitl_pack_path"])
+            if pack_path.exists():
+                pack_items = load_jsonl(pack_path)
+                
+                with st.form("hitl_labeling_form", clear_on_submit=False):
+                    st.markdown("### Label Tasks")
+                    for idx, item in enumerate(pack_items):
+                        item_id = item.get("id", f"item_{idx}")
+                        with st.expander(f"Task {idx + 1}: {item_id}", expanded=False):
+                            st.markdown(f"**Question:** {item.get('question', 'N/A')}")
+                            
+                            answer = item.get("answer")
+                            if answer:
+                                st.markdown(f"**Answer:** {answer}")
+                            else:
+                                transcript_path = item.get("transcript_path")
+                                if transcript_path and Path(transcript_path).exists():
+                                    with st.expander("View Transcript", expanded=False):
+                                        with open(transcript_path, "r", encoding="utf-8") as f:
+                                            transcript_data = json.load(f)
+                                            st.json(transcript_data)
+                                else:
+                                    st.info("No answer or transcript available.")
+                            
+                            st.markdown(f"**Rubric:** {item.get('rubric', 'N/A')}")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                score = st.radio(
+                                    "Score (1-5)",
+                                    options=[1, 2, 3, 4, 5],
+                                    key=f"score_{item_id}",
+                                    index=st.session_state["hitl_labels"].get(item_id, {}).get("score_1_to_5", 0) - 1 if st.session_state["hitl_labels"].get(item_id, {}).get("score_1_to_5") else 0,
+                                )
+                            with col2:
+                                verdict = st.radio(
+                                    "Verdict",
+                                    options=["pass", "fail"],
+                                    key=f"verdict_{item_id}",
+                                    index=0 if st.session_state["hitl_labels"].get(item_id, {}).get("verdict") == "pass" else 1,
+                                )
+                            
+                            comment = st.text_input(
+                                "Comment (optional)",
+                                key=f"comment_{item_id}",
+                                value=st.session_state["hitl_labels"].get(item_id, {}).get("comment", ""),
+                            )
+                            
+                            st.session_state["hitl_labels"][item_id] = {
+                                "score_1_to_5": score,
+                                "verdict": verdict,
+                                "comment": comment,
+                            }
+                    
+                    submitted = st.form_submit_button("Save Labels (Preview)")
+                    if submitted:
+                        st.success("Labels saved in session. Use 'Save Labeled File' to write to disk.")
+                
+                # Check if all items have required labels
+                all_labeled = len(st.session_state.get("hitl_labels", {})) == len(pack_items)
+                all_complete = all(
+                    label.get("score_1_to_5") and label.get("verdict")
+                    for label in st.session_state.get("hitl_labels", {}).values()
+                )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Save Labeled File", key="save_labeled_file", disabled=not (all_labeled and all_complete)):
+                        latest_dir = get_latest_run_dir()
+                        if latest_dir:
+                            labeled_path = latest_dir / "hitl_labeled.jsonl"
+                            with open(labeled_path, "w", encoding="utf-8") as f:
+                                for item in pack_items:
+                                    item_id = item.get("id", f"item_{pack_items.index(item)}")
+                                    label = st.session_state["hitl_labels"].get(item_id, {})
+                                    labeled_item = {
+                                        **item,
+                                        "score_1_to_5": label.get("score_1_to_5"),
+                                        "verdict": label.get("verdict"),
+                                        "comment": label.get("comment", ""),
+                                    }
+                                    f.write(json.dumps(labeled_item, ensure_ascii=False) + "\n")
+                            st.success(f"✅ Saved: `{labeled_path}`")
+                            st.session_state["hitl_labeled_path"] = str(labeled_path)
+                            
+                            # Download button
+                            with open(labeled_path, "rb") as f:
+                                st.download_button(
+                                    "Download Labeled File",
+                                    data=f,
+                                    file_name=labeled_path.name,
+                                    mime="application/jsonl",
+                                )
+                        else:
+                            st.error("Could not determine run directory.")
+                    else:
+                        if not all_labeled or not all_complete:
+                            st.caption("⚠️ Fill all score and verdict fields to enable save.")
+                
+                with col2:
+                    labeled_path_str = st.session_state.get("hitl_labeled_path")
+                    if labeled_path_str and Path(labeled_path_str).exists():
+                        if st.button("Score Labeled File", key="score_labeled_file"):
+                            labeled_path = Path(labeled_path_str)
+                            # Try harness scoring first
+                            command = [
+                                sys.executable,
+                                "-m",
+                                "eval_harness.run",
+                                "--suite",
+                                "hitl",
+                                "--k",
+                                "1",
+                                "--hitl-labels",
+                                str(labeled_path),
+                            ]
+                            success, stdout, stderr, return_code = run_with_env(command, "Eval harness (hitl score)")
+                            
+                            if success or (return_code == 0 and stdout):
+                                st.success("Scoring completed via harness.")
+                                st.code(stdout)
+                                # Try to load updated report
+                                updated_report = load_latest_report()
+                                if updated_report and updated_report.get("hitl") and updated_report["hitl"].get("summary"):
+                                    st.json(updated_report["hitl"]["summary"])
+                            else:
+                                # Fallback: compute summary in UI
+                                st.warning("Harness scoring failed; using UI fallback.")
+                                labeled_items = load_jsonl(labeled_path)
+                                if labeled_items:
+                                    total = len(labeled_items)
+                                    pass_count = sum(1 for item in labeled_items if item.get("verdict") == "pass")
+                                    avg_score = sum(item.get("score_1_to_5", 0) for item in labeled_items) / total
+                                    
+                                    st.markdown("**(UI fallback) Summary:**")
+                                    st.write(f"- Total labeled: {total}")
+                                    st.write(f"- Pass rate: {pass_count}/{total} ({pass_count/total*100:.1f}%)")
+                                    st.write(f"- Average score: {avg_score:.2f}")
+                                
+                                with st.expander("🔍 Error Details", expanded=False):
+                                    st.text("STDOUT:")
+                                    st.code(stdout)
+                                    st.text("STDERR:")
+                                    st.code(stderr)
+                    else:
+                        st.caption("Save labeled file first to enable scoring.")
+            else:
+                st.error(f"HITL pack not found: {pack_path}")
 
     uploaded = st.file_uploader(
         "Upload Labeled HITL File (.jsonl)",
