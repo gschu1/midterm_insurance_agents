@@ -702,7 +702,7 @@ python -m eval_harness.run --suite all   --k 1
 
 Run the HITL suite to export a labeling pack in the run folder (e.g., `hitl_export.jsonl`). Label tasks either:
 - **Integrated UI**: Use the "Open HITL Labeling UI" button in Streamlit to label directly in the app (score/pass/comment), save to `hitl_labeled.jsonl`, and score.
-- **Offline**: Label the JSONL file manually, then import via CLI:
+- **Offline + CLI**: Label the JSONL file manually, then import and score via CLI (supported flag):
 ```powershell
 python -m eval_harness.run --suite hitl --k 1 --hitl-labels path\to\labeled.jsonl
 ```

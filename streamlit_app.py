@@ -861,16 +861,19 @@ with tab4:
                             ]
                             success, stdout, stderr, return_code = run_with_env(command, "Eval harness (hitl score)")
                             
-                            if success or (return_code == 0 and stdout):
-                                st.success("Scoring completed via harness.")
+                            if return_code == 0:
+                                st.success("✅ Scoring completed via harness.")
                                 st.code(stdout)
                                 # Try to load updated report
                                 updated_report = load_latest_report()
                                 if updated_report and updated_report.get("hitl") and updated_report["hitl"].get("summary"):
+                                    st.markdown("**Summary metrics:**")
                                     st.json(updated_report["hitl"]["summary"])
+                                elif stdout:
+                                    st.info("Harness completed; check report.json in run folder for full summary.")
                             else:
                                 # Fallback: compute summary in UI
-                                st.warning("Harness scoring failed; using UI fallback.")
+                                st.warning("Harness scoring failed; using UI fallback summary.")
                                 labeled_items = load_jsonl(labeled_path)
                                 if labeled_items:
                                     total = len(labeled_items)
