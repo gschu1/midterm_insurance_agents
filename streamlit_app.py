@@ -1,5 +1,5 @@
 """
-Optional Streamlit Grader Dashboard for Midterm Insurance Agents
+Optional Streamlit Grader Dashboard for Capstone Insurance Claim Agents
 
 This UI is a wrapper around existing CLI tools - it does not modify app logic.
 Run with: streamlit run streamlit_app.py
@@ -19,12 +19,12 @@ EVAL_DIR = SRC_DIR / "eval"
 
 # Page config
 st.set_page_config(
-    page_title="Midterm Insurance Agents - Grader Dashboard",
+    page_title="Capstone Insurance Claim Agents - Grader Dashboard",
     page_icon="📊",
     layout="wide"
 )
 
-st.title("📊 Midterm Insurance Agents - Grader Dashboard")
+st.title("📊 Capstone Insurance Claim Agents - Grader Dashboard")
 st.markdown("**Optional UI wrapper for running demos and evaluations**")
 
 # Sidebar: Environment controls
