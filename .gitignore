@@ -43,3 +43,7 @@ Thumbs.db
 submission.zip
 src/eval/eval_report.json
 
+# Evaluation harness generated artifacts
+eval_harness/runs/
+eval_harness/**/*.tmp
+

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["correctness", "pass", "uncertainty_flag"],
+  "properties": {
+    "correctness": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "Correctness score from 1-5"
+    },
+    "evidence": {
+      "type": "string",
+      "description": "Explanation of the correctness judgment"
+    },
+    "uncertainty_flag": {
+      "type": "boolean",
+      "description": "True if judge is uncertain or lacks sufficient evidence"
+    },
+    "pass": {
+      "type": "boolean",
+      "description": "Whether the answer passes (typically correctness >= 4 and not uncertain)"
+    },
+    "failure_reason": {
+      "type": ["string", "null"],
+      "description": "Reason for failure if pass is false"
+    }
+  }
+}
+

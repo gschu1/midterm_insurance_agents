@@ -539,6 +539,58 @@ The file `data/claim_timeline.pdf` is generated from `data/claim_timeline.md` an
 python scripts\ensure_claim_pdf.py
 ```
 
+7.5 Optional: Streamlit Grader Dashboard
+
+An optional Streamlit UI is available for running demos and evaluations in a human-friendly way. **This UI is a wrapper only** — it does not modify any existing app logic, agents, indexing, or MCP code. The CLI remains the official path for production use.
+
+**What it does:**
+- Provides a web-based interface for running evaluation judge
+- Displays evaluation results with metrics and per-test tables
+- Shows recommended demo questions for screen recording
+- Includes an artifacts checklist mapping to requirements
+- Allows configuration of MCP and debug settings via sidebar
+
+**Installation:**
+```powershell
+pip install -r requirements-ui.txt
+```
+
+**Running the UI:**
+```powershell
+streamlit run streamlit_app.py
+```
+
+The UI will open in your browser. Use the tabs to:
+- **Run Quick Demo Questions**: Copy recommended questions for screen recording
+- **Single Question (UI)**: Ask a single question via subprocess wrapper (convenience feature; CLI recommended for best results)
+- **Run Evaluation (Judge)**: Execute the evaluation judge and view results
+- **Artifacts & Submission Map**: Check that all required artifacts are present
+
+**Screenshot for submission:**
+After running the evaluation judge in the UI, screenshot the "Evaluation Results Summary" panel which shows:
+- LLM Correctness (1-5 scale)
+- Exact Match (fraction)
+- Context Hit (fraction)
+- Additional metrics (relevance_score, recall_score if available)
+- Per-test results table
+
+**Requirement mapping:**
+- **Evaluation screenshot**: Use the "Evaluation Results Summary" panel from the UI (or CLI output)
+- **MCP strict mode proof**: Set `USE_REAL_MCP=1` and `ALLOW_MCP_FALLBACK=0` in sidebar, then check logs for `[REAL MCP]` lines
+- **Table bonus evidence**: Set `DEBUG_SOURCES=1` in sidebar when running table questions
+- **All other artifacts**: See the "Artifacts & Submission Map" tab for checklist
+
+**Windows note:** Evaluation output is ASCII-safe to avoid encoding issues. If you still encounter encoding problems, set `PYTHONIOENCODING=utf-8` in your environment before running.
+
+**Report path:** The evaluation report is generated at `src/eval/eval_report.json`. The UI automatically loads and displays this file after running the judge.
+
+**UI status definitions:**
+- **Success:** Judge completed with exit code 0 and report file exists
+- **Warning:** Judge returned non-zero exit code but report file exists (e.g., encoding warnings that don't prevent report generation)
+- **Failure:** Judge failed and no report file was generated
+
+**Note:** The UI is optional. All functionality is available via CLI commands (see sections 7.2 and 7.3 above).
+
 The script will automatically append appendix sections if needed to reach the minimum page count.
 
 7.5 Table bonus + evaluation screenshot + screen recording
@@ -613,7 +665,156 @@ An evaluation report is also written to `eval/eval_report.json` containing per-t
 - Ensure the `.env` file is not visible or mentioned
 - The evaluation metrics table is designed to be screenshot-friendly
 
-8. Limitations and possible extensions
+8. Evaluation harness (Lesson 19 add-on — additive, no changes to app)
+
+This section documents the evaluation harness add-on that satisfies Lesson 19 requirements. **This harness is ADDITIVE ONLY** — it does not modify any existing app code, agents, or logic.
+
+8.1 What it does
+
+The evaluation harness provides:
+- **20 code-based eval units**: Fast, objective checks using regex, substring matching, forbidden patterns, context hit detection, and source type verification
+- **15–20 model-based eval units**: LLM-as-judge with structured JSON output and schema validation
+- **10 human-in-the-loop eval units**: Export/import workflow for human labeling with agreement metrics
+
+All evaluation artifacts are stored in `eval_harness/runs/` (gitignored) with proof-carrying JSON files for each trial.
+
+8.2 What it does NOT change
+
+The harness:
+- Does NOT modify existing agent code (`src/agents/*`)
+- Does NOT change indexing logic (`src/indexing.py`)
+- Does NOT alter the main entry point (`src/main.py`)
+- Does NOT refactor existing evaluation code (`src/eval/*`)
+- Does NOT change any interfaces or function signatures
+
+The harness is a pure add-on that imports and uses existing code as-is.
+
+8.3 Commands
+
+**Run code suite (20 tasks, k=1 by default):**
+```powershell
+python -m eval_harness.run --suite code --k 1
+```
+
+**Run model suite (15 tasks, k=3 by default):**
+```powershell
+python -m eval_harness.run --suite model --k 3
+```
+
+**Run HITL suite (10 tasks, k=1 by default):**
+```powershell
+python -m eval_harness.run --suite hitl --k 1
+```
+
+**Limit number of tasks (for testing):**
+```powershell
+python -m eval_harness.run --suite code --limit 3
+```
+
+**Export HITL tasks for human labeling:**
+```powershell
+python -m eval_harness.hitl.export_hitl --output hitl_export.csv
+```
+
+**Import labeled HITL tasks:**
+```powershell
+python -m eval_harness.hitl.import_hitl --file labeled.csv --run <run_id>
+```
+
+8.4 Artifact storage
+
+All generated artifacts are stored in `eval_harness/runs/<run_id>/`:
+- `trials/<task_id>__t<trial>.json`: Individual trial results with inputs, outputs, sources, and grades
+- `report.json`: Aggregated metrics and summary
+
+Each trial JSON includes:
+- Task ID, suite, trial index, timestamp, git commit
+- Input question and payload
+- System answer, chosen agent, retrieved sources
+- Outcome checks (for code graders)
+- Grader outputs (code grades, model judge grades, HITL labels)
+- Model/provider metadata
+
+8.5 Metrics
+
+The harness reports:
+- **pass@1**: Fraction of tasks that pass on the first trial
+- **pass@k**: Fraction of tasks that pass on at least one trial
+- **pass^k**: Fraction of tasks that pass on ALL trials
+
+Output is formatted as a screenshot-friendly table suitable for documentation.
+
+8.6 Missing API keys
+
+If `OPENAI_API_KEY` is not set when running the model suite:
+- The harness prints a clear message: "⚠️ OPENAI_API_KEY not set - skipping model judge"
+- Model judge grades are marked with `uncertainty_flag: true`
+- The suite continues gracefully (no stacktrace)
+- Code and HITL suites run normally without API keys
+
+8.7 Task specifications
+
+Tasks are defined in JSONL format:
+- `eval_harness/tasks/code.jsonl`: 20 code-based tasks
+- `eval_harness/tasks/model.jsonl`: 15 model-based tasks
+- `eval_harness/tasks/hitl.jsonl`: 10 HITL tasks
+
+Each task specifies:
+- `task_id`: Unique identifier
+- `suite`: "code", "model", or "hitl"
+- `question`: Input question
+- Suite-specific fields (expected_regex, rubric, rubric_fields, etc.)
+- `ground_truth`: Reference answer (for context hit checks and human reference)
+
+8.8 Screenshot results
+
+After running a suite, the summary report is printed to stdout in a format suitable for screenshots:
+
+```
+================================================================================
+Evaluation Summary - CODE Suite
+================================================================================
+
+Run directory: eval_harness/runs/code_20240101_120000
+
+Metrics:
+Metric               Value          
+-----------------------------------
+pass@1               0.850          
+pass@k               0.900          
+pass^k               0.800          
+total_tasks          20             
+total_trials         20             
+k (trials per task)  1              
+================================================================================
+```
+
+8.9 Architecture
+
+The harness is organized as:
+- `eval_harness/run.py`: CLI entry point
+- `eval_harness/runner.py`: Adapter that calls existing `ManagerAgent.answer()` without modifications
+- `eval_harness/graders/`: Code graders and model judge
+- `eval_harness/report.py`: Metrics aggregation and reporting
+- `eval_harness/hitl/`: HITL export/import tools
+- `eval_harness/types.py`: Data models (TaskSpec, TrialResult, GradeResult, etc.)
+- `eval_harness/schemas/`: JSON schema for model judge output
+
+8.10 Verification
+
+To verify the harness works and confirm no drift:
+```powershell
+# Compile check
+python -m compileall .
+
+# Run demo (3 tasks)
+python -m eval_harness.run --suite code --limit 3
+
+# Check that no existing files were modified
+git status
+```
+
+9. Limitations and possible extensions
 Current limitations:
 
 Routing uses simple keyword heuristics rather than an LLM-based classifier.

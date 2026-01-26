@@ -1,0 +1,9 @@
+# Optional UI dependencies for Streamlit Grader Dashboard
+# Install with: pip install -r requirements-ui.txt
+# 
+# Note: This is separate from requirements.txt to avoid breaking grader installs.
+# The main app works without these dependencies.
+
+streamlit>=1.30.0
+pandas>=2.0.0
+
