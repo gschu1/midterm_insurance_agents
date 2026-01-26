@@ -16,6 +16,8 @@ import streamlit as st
 REPO_ROOT = Path(__file__).resolve().parent
 SRC_DIR = REPO_ROOT / "src"
 EVAL_DIR = SRC_DIR / "eval"
+EVAL_HARNESS_DIR = REPO_ROOT / "eval_harness"
+EVAL_HARNESS_RUNS_DIR = EVAL_HARNESS_DIR / "runs"
 
 # Page config
 st.set_page_config(
@@ -66,37 +68,63 @@ with st.sidebar:
     - CLI remains the official path for production use
     """)
 
+    with st.expander("🧪 Environment Diagnostics", expanded=False):
+        st.caption("These are shown for debugging and grader-proofing.")
+        st.text(f"sys.executable: {sys.executable}")
+        st.text(f"sys.version: {sys.version.splitlines()[0]}")
+        st.text(f"cwd: {Path.cwd()}")
+
+        def _try_import(module_name: str) -> None:
+            try:
+                __import__(module_name)
+                st.success(f"import {module_name} OK")
+            except Exception as e:
+                st.error(f"import {module_name} FAILED")
+                st.code(f"{type(e).__name__}: {e}")
+
+        _try_import("llama_index")
+        _try_import("eval_harness")
+
 
 # Helper function to run subprocess with env vars
-def run_with_env(command, description, stdin_input=None):
-    """Run a subprocess command with environment variables from sidebar."""
+def run_with_env(command, description, stdin_input=None, timeout_s: int = 300):
+    """Run a subprocess command with hardened env/cwd/interpreter."""
     env = os.environ.copy()
     env["USE_REAL_MCP"] = use_real_mcp
     env["ALLOW_MCP_FALLBACK"] = allow_mcp_fallback
     env["DEBUG_SOURCES"] = debug_sources
+    # Ensure local imports resolve in subprocess (repo root on PYTHONPATH).
+    env["PYTHONPATH"] = str(REPO_ROOT) + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
+
+    # Enforce current interpreter in subprocess.
+    if isinstance(command, (list, tuple)) and len(command) > 0:
+        if str(command[0]) != sys.executable:
+            command = [sys.executable, *list(command)]
     
     try:
         result = subprocess.run(
             command,
-            cwd=REPO_ROOT,
+            cwd=str(REPO_ROOT),
             env=env,
             capture_output=True,
             text=True,
-            executable=sys.executable,
             input=stdin_input,
-            timeout=300  # 5 minute timeout for safety
+            timeout=timeout_s
         )
         return result.returncode == 0, result.stdout, result.stderr, result.returncode
     except subprocess.TimeoutExpired:
-        return False, "", "Command timed out after 5 minutes", 1
+        return False, "", f"Command timed out after {timeout_s} seconds", 1
     except Exception as e:
         return False, "", str(e), 1
 
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📝 Run Quick Demo Questions",
     "❓ Single Question (UI)",
+    "🧪 Eval Harness (Lesson-19)",
     "📊 Run Evaluation (Judge)",
     "✅ Artifacts & Submission Map"
 ])
@@ -224,7 +252,279 @@ with tab2:
 
 
 # Tab 3: Evaluation Judge
+# Tab 3: Eval Harness (Lesson-19)
 with tab3:
+    st.header("Lesson 19 Eval Harness")
+    st.markdown(
+        "Runs `python -m eval_harness.run` suites (code/model/HITL) using the same hardened subprocess runner."
+    )
+
+    # Quick import check for clearer UX
+    try:
+        import eval_harness as _  # noqa: F401
+        eval_harness_import_ok = True
+    except Exception:
+        eval_harness_import_ok = False
+
+    if not eval_harness_import_ok:
+        st.error("`eval_harness` could not be imported in this environment.")
+        if (REPO_ROOT / "requirements.txt").exists() or (REPO_ROOT / "requirements-ui.txt").exists():
+            st.info(
+                "If you haven't installed deps in this venv yet, install from `requirements.txt` "
+                "(and optionally `requirements-ui.txt`)."
+            )
+    else:
+        col_a, col_b, col_c = st.columns(3)
+
+        with col_a:
+            st.subheader("Run Code Suite")
+            if st.button("▶ Run Code Suite (k=1)", key="eh_code"):
+                with st.spinner("Running eval harness (code suite)..."):
+                    command = [sys.executable, "-m", "eval_harness.run", "--suite", "code", "--k", "1"]
+                    success, stdout, stderr, _ = run_with_env(command, "Eval harness - code", timeout_s=600)
+                    (st.success if success else st.error)("Finished.")
+                    with st.expander("📄 Output", expanded=not success):
+                        st.text("STDOUT:")
+                        st.code(stdout)
+                        if stderr:
+                            st.text("STDERR:")
+                            st.code(stderr)
+
+        with col_b:
+            st.subheader("Run Model Suite")
+            if st.button("▶ Run Model Suite (k=1)", key="eh_model"):
+                with st.spinner("Running eval harness (model suite)..."):
+                    command = [sys.executable, "-m", "eval_harness.run", "--suite", "model", "--k", "1"]
+                    success, stdout, stderr, _ = run_with_env(command, "Eval harness - model", timeout_s=600)
+                    (st.success if success else st.error)("Finished.")
+                    with st.expander("📄 Output", expanded=not success):
+                        st.text("STDOUT:")
+                        st.code(stdout)
+                        if stderr:
+                            st.text("STDERR:")
+                            st.code(stderr)
+
+        with col_c:
+            st.subheader("HITL")
+            if st.button("▶ Create HITL Run (k=1)", key="eh_hitl_create"):
+                with st.spinner("Running eval harness (HITL suite)..."):
+                    command = [sys.executable, "-m", "eval_harness.run", "--suite", "hitl", "--k", "1"]
+                    success, stdout, stderr, _ = run_with_env(command, "Eval harness - hitl", timeout_s=600)
+                    (st.success if success else st.error)("Finished.")
+                    with st.expander("📄 Output", expanded=not success):
+                        st.text("STDOUT:")
+                        st.code(stdout)
+                        if stderr:
+                            st.text("STDERR:")
+                            st.code(stderr)
+
+        st.markdown("---")
+        st.subheader("Integrated HITL Labeling (Save + Score)")
+        st.caption(
+            "Loads the latest HITL run, lets you label items, saves labels, imports them, and regenerates a HITL report."
+        )
+
+        def _list_run_dirs(prefix: str):
+            if not EVAL_HARNESS_RUNS_DIR.exists():
+                return []
+            dirs = [p for p in EVAL_HARNESS_RUNS_DIR.iterdir() if p.is_dir() and p.name.startswith(prefix)]
+            return sorted(dirs, key=lambda p: p.stat().st_mtime, reverse=True)
+
+        hitl_runs = _list_run_dirs("hitl_")
+        if not hitl_runs:
+            st.info("No HITL runs found yet. Click “Create HITL Run (k=1)” above to generate one.")
+        else:
+            default_idx = 0
+            selected_run_dir = st.selectbox(
+                "Select HITL run directory",
+                options=hitl_runs,
+                index=default_idx,
+                format_func=lambda p: p.name,
+                key="hitl_run_select",
+            )
+            run_id = Path(selected_run_dir).name
+            trials_dir = Path(selected_run_dir) / "trials"
+
+            trial_files = sorted(trials_dir.glob("*.json")) if trials_dir.exists() else []
+            if not trial_files:
+                st.warning("No trial JSON files found under this run directory.")
+            else:
+                # Load trials
+                trials = []
+                for tf in trial_files:
+                    try:
+                        with open(tf, "r", encoding="utf-8") as f:
+                            trials.append(json.load(f))
+                    except Exception:
+                        continue
+
+                if not trials:
+                    st.warning("Failed to load any trial JSONs for labeling.")
+                else:
+                    # Labels state
+                    if "hitl_labels" not in st.session_state or st.session_state.get("hitl_labels_run_id") != run_id:
+                        st.session_state["hitl_labels_run_id"] = run_id
+                        st.session_state["hitl_labels"] = {}
+
+                    st.markdown(f"**Loaded trials:** {len(trials)} items from `{Path(selected_run_dir).relative_to(REPO_ROOT)}`")
+
+                    for trial in trials:
+                        task_id = trial.get("task_id", "unknown")
+                        question = trial.get("question", "")
+                        answer = trial.get("answer", "")
+                        sources = trial.get("sources", [])
+
+                        with st.expander(f"{task_id}: {question[:80]}{'...' if len(question) > 80 else ''}", expanded=False):
+                            st.markdown("**Question**")
+                            st.code(question, language=None)
+                            st.markdown("**System answer**")
+                            st.code(answer, language=None)
+                            with st.expander("Sources", expanded=False):
+                                st.json(sources)
+
+                            existing = st.session_state["hitl_labels"].get(task_id, {})
+                            human_score = st.text_input(
+                                "Score (e.g. 1-5 or pass/fail)",
+                                value=str(existing.get("human_score", "")),
+                                key=f"hitl_score_{run_id}_{task_id}",
+                            )
+                            human_notes = st.text_area(
+                                "Comment / notes",
+                                value=str(existing.get("human_notes", "")),
+                                key=f"hitl_notes_{run_id}_{task_id}",
+                                height=80,
+                            )
+                            st.session_state["hitl_labels"][task_id] = {
+                                "task_id": task_id,
+                                "human_score": human_score,
+                                "human_notes": human_notes,
+                            }
+
+                    col_save, col_score = st.columns(2)
+                    with col_save:
+                        if st.button("💾 Save labels to run dir", key="hitl_save_labels"):
+                            labels = list(st.session_state["hitl_labels"].values())
+                            labels_jsonl_path = Path(selected_run_dir) / "hitl_labeled.jsonl"
+                            labels_csv_path = Path(selected_run_dir) / "hitl_labeled.csv"
+
+                            # Write JSONL (grader-friendly) + CSV (compatible with import_hitl.py)
+                            with open(labels_jsonl_path, "w", encoding="utf-8") as f:
+                                for row in labels:
+                                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+                            # Minimal CSV columns expected by import_hitl.py
+                            import csv
+                            with open(labels_csv_path, "w", newline="", encoding="utf-8") as f:
+                                writer = csv.DictWriter(f, fieldnames=["task_id", "human_score", "human_notes"])
+                                writer.writeheader()
+                                for row in labels:
+                                    writer.writerow(
+                                        {
+                                            "task_id": row.get("task_id", ""),
+                                            "human_score": row.get("human_score", ""),
+                                            "human_notes": row.get("human_notes", ""),
+                                        }
+                                    )
+
+                            st.success(f"Saved `{labels_jsonl_path.name}` and `{labels_csv_path.name}` in `{run_id}`.")
+
+                    with col_score:
+                        if st.button("📈 Import labels + score HITL", key="hitl_score_labels"):
+                            labels_csv_path = Path(selected_run_dir) / "hitl_labeled.csv"
+                            if not labels_csv_path.exists():
+                                st.error("No `hitl_labeled.csv` found. Click “Save labels to run dir” first.")
+                            else:
+                                with st.spinner("Importing labels into trial JSONs..."):
+                                    import_cmd = [
+                                        sys.executable,
+                                        "-m",
+                                        "eval_harness.hitl.import_hitl",
+                                        "--file",
+                                        str(labels_csv_path),
+                                        "--run",
+                                        run_id,
+                                    ]
+                                    ok, out, err, _ = run_with_env(import_cmd, "Import HITL labels", timeout_s=300)
+                                    (st.success if ok else st.error)("Import finished.")
+                                    with st.expander("📄 Import Output", expanded=not ok):
+                                        st.text("STDOUT:")
+                                        st.code(out)
+                                        if err:
+                                            st.text("STDERR:")
+                                            st.code(err)
+
+                                with st.spinner("Regenerating HITL report..."):
+                                    # Recompute report from updated trials without re-running trials.
+                                    report_cmd = [
+                                        sys.executable,
+                                        "-c",
+                                        (
+                                            "import json\n"
+                                            "from pathlib import Path\n"
+                                            "from eval_harness.report import print_summary_report, generate_detailed_report\n"
+                                            f"run_dir = Path(r'{str(Path(selected_run_dir))}')\n"
+                                            "suite = 'hitl'\n"
+                                            "print_summary_report(run_dir, suite)\n"
+                                            "report = generate_detailed_report(run_dir, suite)\n"
+                                            "out_file = run_dir / 'report.json'\n"
+                                            "out_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding='utf-8')\n"
+                                            "print(f'\\n[OK] Detailed report saved to: {out_file}')\n"
+                                        ),
+                                    ]
+                                    ok2, out2, err2, _ = run_with_env(report_cmd, "Score HITL", timeout_s=120)
+                                    (st.success if ok2 else st.error)("Scoring finished.")
+                                    with st.expander("📄 Scoring Output", expanded=not ok2):
+                                        st.text("STDOUT:")
+                                        st.code(out2)
+                                        if err2:
+                                            st.text("STDERR:")
+                                            st.code(err2)
+
+        st.markdown("---")
+        st.subheader("Offline HITL Import (keep existing export/import path)")
+        st.caption("If you labeled a CSV externally, upload it here and apply it to a selected HITL run.")
+
+        hitl_runs_for_import = _list_run_dirs("hitl_")
+        if hitl_runs_for_import:
+            import_run_dir = st.selectbox(
+                "Run to import into",
+                options=hitl_runs_for_import,
+                index=0,
+                format_func=lambda p: p.name,
+                key="hitl_import_run_select",
+            )
+            import_run_id = Path(import_run_dir).name
+            uploaded = st.file_uploader(
+                "Upload labeled CSV (must include: task_id, human_score, human_notes)",
+                type=["csv"],
+                key="hitl_csv_upload",
+            )
+            if st.button("⬆ Apply uploaded labels", key="hitl_apply_uploaded"):
+                if uploaded is None:
+                    st.warning("Please upload a CSV first.")
+                else:
+                    labels_path = Path(import_run_dir) / "hitl_uploaded_labels.csv"
+                    labels_path.write_bytes(uploaded.getvalue())
+                    cmd = [
+                        sys.executable,
+                        "-m",
+                        "eval_harness.hitl.import_hitl",
+                        "--file",
+                        str(labels_path),
+                        "--run",
+                        import_run_id,
+                    ]
+                    ok, out, err, _ = run_with_env(cmd, "Import uploaded HITL labels", timeout_s=300)
+                    (st.success if ok else st.error)("Import finished.")
+                    with st.expander("📄 Import Output", expanded=not ok):
+                        st.text("STDOUT:")
+                        st.code(out)
+                        if err:
+                            st.text("STDERR:")
+                            st.code(err)
+
+# Tab 4: Evaluation Judge
+with tab4:
     st.header("Run Evaluation Judge")
     st.markdown("""
     This runs `src/eval/judge.py` which evaluates all test cases and generates `eval/eval_report.json`.
@@ -451,7 +751,7 @@ with tab3:
 
 
 # Tab 4: Artifacts Checklist
-with tab4:
+with tab5:
     st.header("Artifacts & Submission Checklist")
     st.markdown("""
     This checklist maps project artifacts to Daniel's requirements.
