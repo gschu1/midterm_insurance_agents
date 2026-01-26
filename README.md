@@ -21,13 +21,20 @@ This project implements a multi-agent insurance claim Q&A system over a syntheti
 
 ## Quickstart (Windows PowerShell)
 
+### Canonical virtual environment
+
+This repo **standardizes on a single virtual environment folder: `.venv/`**.
+If you have an older `venv/` folder from a previous clone, delete it to avoid interpreter confusion.
+
+For the most reliable (no-activation) setup + demo flow, follow `DEMO.md`.
+
 ### 1. Clone and Setup
 
 ```powershell
 git clone <repository-url>
 cd capstone_insurance_claim_agents
 python -m venv .venv
-.\.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 ```
 
 ### 2. Install Dependencies
@@ -84,16 +91,64 @@ python .\src\main.py
 ### Streamlit UI (Optional)
 
 ```powershell
-streamlit run streamlit_app.py
+# Always run Streamlit via `python -m` so the ACTIVE interpreter is used.
+python -m streamlit run streamlit_app.py
 ```
 
 The UI provides:
 - **Run Quick Demo Questions**: Copy recommended questions for screen recording
 - **Single Question (UI)**: Ask a single question via subprocess wrapper
+- **Eval Harness (Lesson-19)**: Run code/model/HITL suites and label HITL results
 - **Run Evaluation (Judge)**: Execute evaluation and view results
 - **Artifacts & Submission Map**: Checklist of deliverables
 
 **Note**: The UI is a wrapper only; CLI remains the official path for production use.
+
+---
+
+## Demo (copy/paste, always uses `.venv`)
+
+If you want zero ambiguity (no activation required), use the venv’s interpreter explicitly:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import sys; print(sys.executable)"
+```
+
+### 90-second Live Demo Script
+
+**Step 1 — Streamlit demo (starts local UI)**
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py
+```
+
+Expected: Streamlit prints a **Local URL** (typically `http://localhost:8501`). The app tabs include **Eval Harness (Lesson-19)**.
+
+**Step 2 — Judge evaluation**
+
+```powershell
+.\.venv\Scripts\python.exe .\src\eval\judge.py
+```
+
+Expected: writes `src/eval/eval_report.json` (and prints a summary table). Requires `OPENAI_API_KEY`.
+
+**Step 3 — Eval harness run (code suite)**
+
+```powershell
+.\.venv\Scripts\python.exe -m eval_harness.run --suite code --k 1
+```
+
+Expected: creates a new run directory under `eval_harness/runs/code_*/` with `report.json` and per-trial JSONs in `trials/`.
+
+### One-command helper (optional)
+
+This repo includes an idempotent helper script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 -Task setup
+powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 -Task doctor
+powershell -ExecutionPolicy Bypass -File .\scripts\dev.ps1 -Task streamlit
+```
 
 ---
 
